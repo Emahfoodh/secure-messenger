@@ -1,15 +1,11 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { useAuth } from '@/context/AuthContext';
 
-export default function ChatsScreen() {
-  const { user } = useAuth();
-
+export default function ContactsScreen() {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Welcome to Secure Messaging!</Text>
-      <Text style={styles.subtitle}>Logged in as: {user?.email}</Text>
-      <Text style={styles.message}>Chats will be implemented here</Text>
+      <Text style={styles.title}>Contacts</Text>
+      <Text style={styles.message}>Contacts will be implemented here</Text>
     </View>
   );
 }
@@ -25,11 +21,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 20,
   },
   message: {
     fontSize: 14,
