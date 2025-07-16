@@ -1,5 +1,3 @@
-// app/chat/[id].tsx
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -39,17 +37,31 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwnMessage, showSe
   };
 
   const getStatusIcon = () => {
+    // Only show status for our own messages
+    if (!isOwnMessage) return '';
+    
     switch (message.status) {
       case 'sending':
         return '⏳';
       case 'sent':
         return '✓';
-      case 'delivered':
-        return '✓✓';
       case 'read':
         return '✓✓';
       default:
         return '';
+    }
+  };
+
+  const getStatusColor = () => {
+    switch (message.status) {
+      case 'read':
+        return '#34C759'; // Green for read
+      case 'sent':
+        return 'rgba(255,255,255,0.7)'; // Light for sent
+      case 'sending':
+        return 'rgba(255,255,255,0.5)'; // Very light for sending
+      default:
+        return 'rgba(255,255,255,0.7)';
     }
   };
 
@@ -95,7 +107,7 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwnMessage, showSe
           </Text>
           
           {isOwnMessage && (
-            <Text style={styles.statusIcon}>
+            <Text style={[styles.statusIcon, { color: getStatusColor() }]}>
               {getStatusIcon()}
             </Text>
           )}
@@ -127,9 +139,10 @@ export default function ChatScreen() {
     loadChatDetails();
     checkContactStatus();
 
-    // Listen to messages
+    // Listen to messages with automatic read marking
     const unsubscribe = MessageService.listenToMessages(
       chatId,
+      user.uid, // Pass current user ID for read marking
       (newMessages) => {
         setMessages(newMessages);
         setLoading(false);
@@ -370,6 +383,7 @@ export default function ChatScreen() {
   );
 }
 
+// Keep all the existing styles from your current chat screen
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -388,7 +402,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
     backgroundColor: '#fff',
-    paddingTop: 60, // Account for status bar
+    paddingTop: 60,
   },
   backButton: {
     paddingRight: 16,
@@ -512,8 +526,8 @@ const styles = StyleSheet.create({
   },
   statusIcon: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.7)',
     marginLeft: 4,
+    fontWeight: 'bold',
   },
   inputContainer: {
     flexDirection: 'row',

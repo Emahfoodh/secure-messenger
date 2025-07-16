@@ -8,16 +8,31 @@ export interface Message {
   senderDisplayName?: string;
   senderProfilePicture?: string;
   content: string;
-  type: 'text' | 'image' | 'file'; // For future expansion
+  type: 'text' | 'image' | 'file' | 'deleted';
   timestamp: string;
-  status: 'sending' | 'sent' | 'delivered' | 'read';
+  status: 'sending' | 'sent' | 'read';
+  readBy?: string[]; // Array of user IDs who have read this message
   editedAt?: string;
-  replyTo?: string; // For future reply feature
+  replyTo?: {
+    messageId: string;
+    content: string;
+    senderUsername: string;
+  };
+}
+
+export interface SendMessageData {
+  content: string;
+  type: 'text' | 'image' | 'file';
+  replyTo?: {
+    messageId: string;
+    content: string;
+    senderUsername: string;
+  };
 }
 
 export interface Chat {
   id: string;
-  participants: string[]; // Array of user UIDs
+  participants: string[]; // Array of user IDs
   participantDetails: ChatParticipant[];
   lastMessage?: {
     content: string;
@@ -26,10 +41,10 @@ export interface Chat {
     timestamp: string;
     type: 'text' | 'image' | 'file';
   };
-  lastActivity: string | any; // Can be Firestore Timestamp or string
-  createdAt: string | any; // Can be Firestore Timestamp or string
+  lastActivity: string;
+  createdAt: string;
   createdBy: string;
-  unreadCount: { [userUid: string]: number };
+  unreadCount: { [userId: string]: number };
   isActive: boolean;
 }
 
@@ -39,12 +54,16 @@ export interface ChatParticipant {
   displayName?: string;
   profilePicture?: string;
   joinedAt: string;
-  lastSeen?: string;
 }
 
 export interface ChatListItem {
   chat: Chat;
-  otherParticipant: ChatParticipant; // For 1-on-1 chats
+  otherParticipant: {
+    uid: string;
+    username: string;
+    displayName?: string;
+    profilePicture?: string;
+  };
   unreadCount: number;
   lastMessage?: {
     content: string;
@@ -53,10 +72,4 @@ export interface ChatListItem {
     timestamp: string;
     isOwnMessage: boolean;
   };
-}
-
-export interface SendMessageData {
-  content: string;
-  type: 'text' | 'image' | 'file';
-  replyTo?: string;
 }

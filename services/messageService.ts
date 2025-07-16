@@ -1,4 +1,4 @@
-// services/messageService.ts
+// services/messageService.ts 
 
 import { 
   collection, 
@@ -13,12 +13,14 @@ import {
   getDoc,
   getDocs,
   where,
-  Timestamp
+  Timestamp,
+  writeBatch
 } from 'firebase/firestore';
 import { db } from '@/config/firebaseConfig';
 import { Message, SendMessageData } from '@/types/messageTypes';
 import { AppError, ErrorType } from '@/services/errorService';
 import { getUserProfile } from '@/services/userService';
+import { arrayUnion as firestoreArrayUnion } from 'firebase/firestore';
 
 export class MessageService {
   /**
@@ -58,7 +60,7 @@ export class MessageService {
 
       // Update message status to sent
       await updateDoc(docRef, { status: 'sent' });
-
+      
       return docRef.id;
     } catch (error) {
       throw new AppError(
@@ -70,10 +72,11 @@ export class MessageService {
   }
 
   /**
-   * Listen to messages in a chat (real-time)
+   * Listen to messages in a chat (real-time) with automatic read marking
    */
   static listenToMessages(
     chatId: string,
+    currentUserId: string,
     callback: (messages: Message[]) => void,
     messageLimit: number = 50
   ): () => void {
@@ -85,7 +88,7 @@ export class MessageService {
         limit(messageLimit)
       );
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      const unsubscribe = onSnapshot(q, async (snapshot) => {
         const messages: Message[] = snapshot.docs.map(doc => {
           const data = doc.data();
           return {
@@ -98,7 +101,23 @@ export class MessageService {
           } as Message;
         }).reverse(); // Reverse to show oldest first
 
-        callback(messages);
+        // Mark unread messages as read (except our own messages)
+        const unreadMessages = messages.filter(msg => 
+          msg.senderId !== currentUserId && 
+          (!msg.readBy || !msg.readBy.includes(currentUserId))
+        );
+
+        if (unreadMessages.length > 0) {
+          await this.markMessagesAsRead(chatId, currentUserId, unreadMessages.map(m => m.id));
+        }
+
+        // Update message statuses based on readBy array
+        const updatedMessages = messages.map(msg => ({
+          ...msg,
+          status: this.calculateMessageStatus(msg, currentUserId)
+        }));
+
+        callback(updatedMessages);
       }, (error) => {
         console.error('Error listening to messages:', error);
         throw new AppError(
@@ -115,6 +134,46 @@ export class MessageService {
         'Failed to set up message listener',
         error
       );
+    }
+  }
+
+  /**
+   * Calculate message status based on readBy array
+   */
+  private static calculateMessageStatus(message: Message, currentUserId: string): 'sent' | 'read' {
+    // If it's our own message
+    if (message.senderId === currentUserId) {
+      // Check if anyone else has read it
+      const othersWhoRead = (message.readBy || []).filter(uid => uid !== currentUserId);
+      return othersWhoRead.length > 0 ? 'read' : 'sent';
+    }
+    
+    // If it's someone else's message, return sent (we don't show status for received messages)
+    return 'sent';
+  }
+
+  /**
+   * Mark messages as read
+   */
+  static async markMessagesAsRead(
+    chatId: string, 
+    userId: string, 
+    messageIds: string[]
+  ): Promise<void> {
+    try {
+      const batch = writeBatch(db);
+
+      messageIds.forEach(messageId => {
+        const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
+        batch.update(messageRef, {
+          readBy: arrayUnion(userId)
+        });
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error('Error marking messages as read:', error);
+      // Don't throw error here to avoid disrupting the chat experience
     }
   }
 
@@ -150,30 +209,6 @@ export class MessageService {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to load older messages',
-        error
-      );
-    }
-  }
-
-  /**
-   * Mark messages as read
-   */
-  static async markMessagesAsRead(
-    chatId: string, 
-    userId: string, 
-    messageIds: string[]
-  ): Promise<void> {
-    try {
-      const updatePromises = messageIds.map(messageId => {
-        const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
-        return updateDoc(messageRef, { status: 'read' });
-      });
-
-      await Promise.all(updatePromises);
-    } catch (error) {
-      throw new AppError(
-        ErrorType.STORAGE,
-        'Failed to mark messages as read',
         error
       );
     }
@@ -221,4 +256,10 @@ export class MessageService {
       );
     }
   }
+}
+/**
+ * Helper to use Firestore's arrayUnion for updating arrays in documents.
+ */
+function arrayUnion<T>(...elements: T[]): unknown {
+  return firestoreArrayUnion(...elements);
 }
