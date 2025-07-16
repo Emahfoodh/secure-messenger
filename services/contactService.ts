@@ -1,12 +1,12 @@
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  deleteDoc, 
-  getDocs,
-  getDoc
-} from 'firebase/firestore';
 import { db } from '@/config/firebaseConfig';
+import {
+    collection,
+    deleteDoc,
+    doc,
+    getDoc,
+    getDocs,
+    setDoc
+} from 'firebase/firestore';
 import { UserProfile } from './userService';
 
 export interface Contact {
@@ -23,8 +23,6 @@ export const addContact = async (currentUserUid: string, contactProfile: UserPro
     const contactData: Contact = {
       uid: contactProfile.uid,
       username: contactProfile.username,
-      displayName: contactProfile.displayName,
-      profilePicture: contactProfile.profilePicture,
       addedAt: new Date().toISOString(),
     };
 
@@ -37,8 +35,6 @@ export const addContact = async (currentUserUid: string, contactProfile: UserPro
       const reverseContactData: Contact = {
         uid: currentUserData.uid,
         username: currentUserData.username,
-        displayName: currentUserData.displayName,
-        profilePicture: currentUserData.profilePicture,
         addedAt: new Date().toISOString(),
       };
       
