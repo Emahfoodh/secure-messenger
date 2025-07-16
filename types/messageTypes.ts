@@ -1,5 +1,13 @@
 // types/messageTypes.ts
 
+export interface ImageData {
+  uri: string;
+  downloadURL: string;
+  width: number;
+  height: number;
+  size: number;
+}
+
 export interface Message {
   id: string;
   chatId: string;
@@ -13,6 +21,8 @@ export interface Message {
   status: 'sending' | 'sent' | 'read';
   readBy?: string[]; // Array of user IDs who have read this message
   editedAt?: string;
+  // Image-specific data
+  imageData?: ImageData;
   replyTo?: {
     messageId: string;
     content: string;
@@ -23,6 +33,8 @@ export interface Message {
 export interface SendMessageData {
   content: string;
   type: 'text' | 'image' | 'file';
+  // Image-specific data for sending
+  imageData?: ImageData;
   replyTo?: {
     messageId: string;
     content: string;

@@ -5,6 +5,7 @@ import {
   doc, 
   addDoc, 
   updateDoc, 
+  setDoc,
   query, 
   orderBy, 
   limit, 
@@ -20,11 +21,12 @@ import { db } from '@/config/firebaseConfig';
 import { Message, SendMessageData } from '@/types/messageTypes';
 import { AppError, ErrorType } from '@/services/errorService';
 import { getUserProfile } from '@/services/userService';
+import { ImageService } from '@/services/imageService';
 import { arrayUnion as firestoreArrayUnion } from 'firebase/firestore';
 
 export class MessageService {
   /**
-   * Send a new message to a chat
+   * Send a new message to a chat (supports text and images)
    */
   static async sendMessage(
     chatId: string, 
@@ -48,10 +50,11 @@ export class MessageService {
         type: messageData.type,
         timestamp: new Date().toISOString(),
         status: 'sending',
+        ...(messageData.imageData && { imageData: messageData.imageData }),
         ...(messageData.replyTo && { replyTo: messageData.replyTo }),
       };
 
-      // Add message to Firestore
+      // Add message to Firestore using addDoc (it will auto-generate ID)
       const messagesRef = collection(db, 'chats', chatId, 'messages');
       const docRef = await addDoc(messagesRef, {
         ...message,
@@ -66,6 +69,88 @@ export class MessageService {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to send message',
+        error
+      );
+    }
+  }
+
+  /**
+   * Send an image message with processing
+   */
+  static async sendImageMessage(
+    chatId: string,
+    senderId: string,
+    imageUri: string,
+    caption: string = ''
+  ): Promise<string> {
+    try {
+      // Get sender profile
+      const senderProfile = await getUserProfile(senderId);
+      if (!senderProfile) {
+        throw new AppError(ErrorType.VALIDATION, 'Sender profile not found');
+      }
+
+      // Create initial message with 'sending' status
+      const initialMessage: Omit<Message, 'id'> = {
+        chatId,
+        senderId,
+        senderUsername: senderProfile.username,
+        ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
+        ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
+        content: caption,
+        type: 'image',
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+      };
+
+      // Add initial message to Firestore using addDoc
+      const messagesRef = collection(db, 'chats', chatId, 'messages');
+      const docRef = await addDoc(messagesRef, {
+        ...initialMessage,
+        timestamp: serverTimestamp(),
+      });
+
+      const messageId = docRef.id;
+
+      // Process image in background
+      try {
+        const processedImage = await ImageService.processImageForChat(
+          imageUri,
+          chatId,
+          messageId
+        );
+
+        // Update message with image data and change status to sent
+        await updateDoc(docRef, {
+          imageData: {
+            uri: processedImage.localUri,
+            downloadURL: processedImage.downloadURL,
+            width: processedImage.width,
+            height: processedImage.height,
+            size: processedImage.size,
+          },
+          status: 'sent',
+        });
+
+        return messageId;
+      } catch (imageError) {
+        // If image processing fails, update message status to indicate error
+        await updateDoc(docRef, {
+          status: 'sent', // Keep as sent but without image
+          content: caption || 'Failed to upload image',
+          type: 'text',
+        });
+        
+        throw new AppError(
+          ErrorType.STORAGE,
+          'Failed to process image',
+          imageError
+        );
+      }
+    } catch (error) {
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Failed to send image message',
         error
       );
     }
@@ -223,7 +308,9 @@ export class MessageService {
       await updateDoc(messageRef, {
         content: 'This message was deleted',
         type: 'deleted',
-        editedAt: new Date().toISOString()
+        editedAt: new Date().toISOString(),
+        // Remove image data if it exists
+        imageData: null,
       });
     } catch (error) {
       throw new AppError(
@@ -235,7 +322,7 @@ export class MessageService {
   }
 
   /**
-   * Edit a message
+   * Edit a message (text only)
    */
   static async editMessage(
     chatId: string, 
@@ -256,7 +343,15 @@ export class MessageService {
       );
     }
   }
+
+  /**
+   * Generate a unique message ID (not needed anymore since addDoc auto-generates)
+   */
+  private static generateMessageId(): string {
+    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
 }
+
 /**
  * Helper to use Firestore's arrayUnion for updating arrays in documents.
  */

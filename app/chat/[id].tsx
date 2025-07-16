@@ -1,3 +1,5 @@
+// app/chat/[id].tsx - Updated with image support
+
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -19,6 +21,9 @@ import { getUserProfile } from '@/services/userService';
 import { isContact } from '@/services/contactService';
 import { Message, Chat } from '@/types/messageTypes';
 import { ErrorService } from '@/services/errorService';
+import ImagePickerModal from '@/components/media/ImagePickerModal';
+import ImageMessage from '@/components/media/ImageMessage';
+import * as ImagePicker from 'expo-image-picker';
 
 interface MessageItemProps {
   message: Message;
@@ -65,6 +70,54 @@ const MessageItem: React.FC<MessageItemProps> = ({ message, isOwnMessage, showSe
     }
   };
 
+  // Handle image messages
+  if (message.type === 'image' && message.imageData) {
+    return (
+      <View style={[
+        styles.messageContainer,
+        isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
+      ]}>
+        {!isOwnMessage && showSender && message.senderProfilePicture && (
+          <Image 
+            source={{ uri: message.senderProfilePicture }} 
+            style={styles.senderAvatar} 
+          />
+        )}
+        
+        <View style={styles.imageMessageWrapper}>
+          {!isOwnMessage && showSender && (
+            <Text style={styles.senderName}>
+              {message.senderDisplayName || message.senderUsername}
+            </Text>
+          )}
+          
+          <ImageMessage
+            imageData={message.imageData}
+            isOwnMessage={isOwnMessage}
+            timestamp={message.timestamp}
+            status={message.status}
+          />
+          
+          {/* Show caption if exists */}
+          {message.content && (
+            <View style={[
+              styles.captionBubble,
+              isOwnMessage ? styles.ownCaptionBubble : styles.otherCaptionBubble
+            ]}>
+              <Text style={[
+                styles.captionText,
+                isOwnMessage ? styles.ownCaptionText : styles.otherCaptionText
+              ]}>
+                {message.content}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // Handle text messages (existing code)
   return (
     <View style={[
       styles.messageContainer,
@@ -129,6 +182,8 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [isContactValid, setIsContactValid] = useState(true);
   const [checkingContact, setCheckingContact] = useState(false);
+  const [showImagePicker, setShowImagePicker] = useState(false);
+  const [sendingImage, setSendingImage] = useState(false);
   
   const flatListRef = useRef<FlatList>(null);
 
@@ -252,6 +307,53 @@ export default function ChatScreen() {
     }
   };
 
+  const handleImageSelected = async (image: ImagePicker.ImagePickerAsset) => {
+    if (!user || !chatId || sendingImage) return;
+
+    // Check if contact is still valid before sending
+    if (!isContactValid) {
+      Alert.alert(
+        'Cannot Send Image',
+        'You can only send images to your contacts. This person is no longer in your contacts list.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setSendingImage(true);
+    
+    try {
+      // Get current user profile for username
+      const currentUserProfile = await getUserProfile(user.uid);
+      const senderUsername = currentUserProfile?.username || user.email || 'User';
+
+      // Send image message
+      await MessageService.sendImageMessage(chatId, user.uid, image.uri);
+
+      // Update last message in chat
+      await ChatService.updateLastMessage(chatId, user.uid, senderUsername, '📷 Photo', 'image');
+
+      // Increment unread count for other participants
+      if (chat) {
+        const otherParticipants = chat.participants.filter(p => p !== user.uid);
+        await Promise.all(
+          otherParticipants.map(participantId => 
+            ChatService.incrementUnreadCount(chatId, participantId)
+          )
+        );
+      }
+
+      // Scroll to bottom
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    } catch (error) {
+      ErrorService.handleError(error, 'Send Image');
+    } finally {
+      setSendingImage(false);
+    }
+  };
+
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isOwnMessage = item.senderId === user?.uid;
     const previousMessage = index > 0 ? messages[index - 1] : null;
@@ -349,6 +451,16 @@ export default function ChatScreen() {
       {/* Message Input */}
       {isContactValid ? (
         <View style={styles.inputContainer}>
+          <TouchableOpacity
+            style={styles.imageButton}
+            onPress={() => setShowImagePicker(true)}
+            disabled={sendingImage}
+          >
+            <Text style={styles.imageButtonText}>
+              {sendingImage ? '⏳' : '📷'}
+            </Text>
+          </TouchableOpacity>
+
           <TextInput
             style={styles.textInput}
             placeholder="Type a message..."
@@ -379,11 +491,25 @@ export default function ChatScreen() {
           </Text>
         </View>
       )}
+
+      {/* Image Picker Modal */}
+      <ImagePickerModal
+        visible={showImagePicker}
+        onClose={() => setShowImagePicker(false)}
+        onImageSelected={handleImageSelected}
+      />
+
+      {/* Sending Image Overlay */}
+      {sendingImage && (
+        <View style={styles.sendingImageOverlay}>
+          <Text style={styles.sendingImageText}>Sending image...</Text>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
 
-// Keep all the existing styles from your current chat screen
+// Keep all the existing styles and add new ones for images
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -538,6 +664,19 @@ const styles = StyleSheet.create({
     borderTopColor: '#eee',
     backgroundColor: '#fff',
   },
+  imageButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  imageButtonText: {
+    fontSize: 18,
+    color: '#fff',
+  },
   textInput: {
     flex: 1,
     borderWidth: 1,
@@ -602,5 +741,52 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
+  },
+  // New styles for image messages
+  imageMessageWrapper: {
+    maxWidth: '75%',
+  },
+  captionBubble: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    marginTop: 4,
+  },
+  ownCaptionBubble: {
+    backgroundColor: '#007AFF',
+    borderBottomRightRadius: 4,
+  },
+  otherCaptionBubble: {
+    backgroundColor: '#f0f0f0',
+    borderBottomLeftRadius: 4,
+  },
+  captionText: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  ownCaptionText: {
+    color: '#fff',
+  },
+  otherCaptionText: {
+    color: '#333',
+  },
+  sendingImageOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendingImageText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
 });
