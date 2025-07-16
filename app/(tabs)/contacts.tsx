@@ -11,9 +11,9 @@ import {
 } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { getContacts, removeContact, Contact } from '@/services/contactService';
-import UserSearchScreen from '@/screens/UserSearchScreen';
-import QRScannerScreen from '@/screens/QRScannerScreen';
-import ContactRequestsScreen from '@/screens/ContactRequestsScreen';
+import UserSearchScreen from '@/screens/contact/UserSearchScreen';
+import QRScannerScreen from '@/screens/contact/QRScannerScreen';
+import ContactRequestsScreen from '@/screens/contact/ContactRequestsScreen';
 import { reload } from 'expo-router/build/global-state/routing';
 
 type TabType = 'contacts' | 'requests' | 'search' | 'scan';
