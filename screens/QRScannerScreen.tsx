@@ -13,7 +13,11 @@ import { CameraView, Camera } from 'expo-camera';
 import { useAuth } from '@/context/AuthContext';
 import { parseQRData } from '@/services/qrService';
 import { getUserProfile, UserProfile } from '@/services/userService';
-import { addContact, isContact } from '@/services/contactService';
+import { 
+  sendContactRequest, 
+  isContact, 
+  checkExistingRequest 
+} from '@/services/contactService';
 
 interface QRScannerScreenProps {
   onClose: () => void;
@@ -29,7 +33,7 @@ export default function QRScannerScreen({ onClose, onScanComplete }: QRScannerSc
   const [processing, setProcessing] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [scannedUserProfile, setScannedUserProfile] = useState<UserProfile | null>(null);
-  const [addingContact, setAddingContact] = useState(false);
+  const [sendingRequest, setSendingRequest] = useState(false);
 
   useEffect(() => {
     const getCameraPermissions = async () => {
@@ -99,6 +103,29 @@ export default function QRScannerScreen({ onClose, onScanComplete }: QRScannerSc
         return;
       }
 
+      // Check for existing request
+      const existingRequest = await checkExistingRequest(user.uid, qrData.uid);
+      if (existingRequest) {
+        const isIncoming = existingRequest.toUid === user.uid;
+        const isOutgoing = existingRequest.fromUid === user.uid;
+        
+        Alert.alert(
+          'Request Exists', 
+          isIncoming 
+            ? `${qrData.username} has already sent you a contact request. Check your requests tab.`
+            : `You have already sent a contact request to ${qrData.username}.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setProcessing(false);
+              },
+            },
+          ]
+        );
+        return;
+      }
+
       // Get full user profile
       const userProfile = await getUserProfile(qrData.uid);
       if (!userProfile) {
@@ -139,18 +166,25 @@ export default function QRScannerScreen({ onClose, onScanComplete }: QRScannerSc
     }
   };
 
-  const handleConfirmAddContact = async () => {
+  const handleSendRequest = async () => {
     if (!user || !scannedUserProfile) return;
 
-    setAddingContact(true);
-    const success = await addContact(user.uid, scannedUserProfile);
-    setAddingContact(false);
+    // Get current user profile to send with request
+    const currentUserProfile = await getUserProfile(user.uid);
+    if (!currentUserProfile) {
+      Alert.alert('Error', 'Could not load your profile information');
+      return;
+    }
+
+    setSendingRequest(true);
+    const success = await sendContactRequest(currentUserProfile, scannedUserProfile);
+    setSendingRequest(false);
 
     if (success) {
       setShowConfirmModal(false);
       Alert.alert(
-        'Contact Added',
-        `${scannedUserProfile.username} has been added to your contacts!`,
+        'Request Sent',
+        `Contact request sent to ${scannedUserProfile.username}!`,
         [
           {
             text: 'OK',
@@ -162,11 +196,11 @@ export default function QRScannerScreen({ onClose, onScanComplete }: QRScannerSc
         ]
       );
     } else {
-      Alert.alert('Error', 'Failed to add contact. Please try again.');
+      Alert.alert('Error', 'Failed to send contact request. Please try again.');
     }
   };
 
-  const handleCancelAddContact = () => {
+  const handleCancelRequest = () => {
     setShowConfirmModal(false);
     setScannedUserProfile(null);
     // Don't reset scanner - user needs to tap "Scan Again"
@@ -187,11 +221,11 @@ export default function QRScannerScreen({ onClose, onScanComplete }: QRScannerSc
         visible={showConfirmModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={handleCancelAddContact}
+        onRequestClose={handleCancelRequest}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add Contact</Text>
+            <Text style={styles.modalTitle}>Send Contact Request</Text>
             
             <View style={styles.userPreview}>
               {scannedUserProfile.profilePicture ? (
@@ -217,25 +251,25 @@ export default function QRScannerScreen({ onClose, onScanComplete }: QRScannerSc
             </View>
 
             <Text style={styles.confirmationText}>
-              Do you want to add this user to your contacts?
+              Do you want to send a contact request to this user?
             </Text>
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.cancelButton]}
-                onPress={handleCancelAddContact}
-                disabled={addingContact}
+                onPress={handleCancelRequest}
+                disabled={sendingRequest}
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
                 style={[styles.modalButton, styles.confirmButton]}
-                onPress={handleConfirmAddContact}
-                disabled={addingContact}
+                onPress={handleSendRequest}
+                disabled={sendingRequest}
               >
                 <Text style={styles.confirmButtonText}>
-                  {addingContact ? 'Adding...' : 'Add Contact'}
+                  {sendingRequest ? 'Sending...' : 'Send Request'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -318,6 +352,7 @@ export default function QRScannerScreen({ onClose, onScanComplete }: QRScannerSc
   );
 }
 
+// Keep all the existing styles and add these new ones:
 const styles = StyleSheet.create({
   container: {
     flex: 1,

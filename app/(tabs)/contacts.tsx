@@ -13,8 +13,10 @@ import { useAuth } from '@/context/AuthContext';
 import { getContacts, removeContact, Contact } from '@/services/contactService';
 import UserSearchScreen from '@/screens/UserSearchScreen';
 import QRScannerScreen from '@/screens/QRScannerScreen';
+import ContactRequestsScreen from '@/screens/ContactRequestsScreen';
+import { reload } from 'expo-router/build/global-state/routing';
 
-type TabType = 'contacts' | 'search' | 'scan';
+type TabType = 'contacts' | 'requests' | 'search' | 'scan';
 
 interface ContactItemProps {
   contact: Contact;
@@ -121,7 +123,7 @@ export default function ContactsScreen() {
               <View style={styles.centerContainer}>
                 <Text style={styles.noContactsText}>No contacts yet</Text>
                 <Text style={styles.noContactsSubtext}>
-                  Use the search tab to find users or scan QR codes
+                  Send contact requests to connect with others
                 </Text>
               </View>
             ) : (
@@ -134,6 +136,8 @@ export default function ContactsScreen() {
             )}
           </View>
         );
+      case 'requests':
+        return <ContactRequestsScreen />;
       case 'search':
         return <UserSearchScreen />;
       case 'scan':
@@ -141,7 +145,7 @@ export default function ContactsScreen() {
           <View style={styles.scanContainer}>
             <Text style={styles.scanTitle}>QR Code Scanner</Text>
             <Text style={styles.scanSubtitle}>
-              Scan a user's QR code to add them to your contacts
+              Scan a user's QR code to send them a contact request
             </Text>
             <TouchableOpacity
               style={styles.scanButton}
@@ -161,10 +165,21 @@ export default function ContactsScreen() {
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'contacts' && styles.activeTab]}
-          onPress={() => setActiveTab('contacts')}
+          onPress={() => {
+            loadContacts()
+            setActiveTab('contacts')
+          }}
         >
           <Text style={[styles.tabText, activeTab === 'contacts' && styles.activeTabText]}>
             Contacts
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
+          onPress={() => setActiveTab('requests')}
+        >
+          <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
+            Requests
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -201,6 +216,7 @@ export default function ContactsScreen() {
   );
 }
 
+// Keep the same styles as before, just add the new tab styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -221,7 +237,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#007AFF',
   },
   tabText: {
-    fontSize: 16,
+    fontSize: 14, // Smaller text due to more tabs
     color: '#666',
   },
   activeTabText: {
