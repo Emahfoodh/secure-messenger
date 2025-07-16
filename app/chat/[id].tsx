@@ -1,6 +1,6 @@
-// app/chat/[id].tsx - Updated with image support
+// app/chat/[id].tsx 
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,163 +12,20 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth } from '@/context/AuthContext';
-import { MessageService } from '@/services/messageService';
+import { MessageService, MessagesPaginationResult } from '@/services/messageService';
 import { ChatService } from '@/services/chatService';
 import { getUserProfile } from '@/services/userService';
 import { isContact } from '@/services/contactService';
 import { Message, Chat } from '@/types/messageTypes';
 import { ErrorService } from '@/services/errorService';
+import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import ImagePickerModal from '@/components/media/ImagePickerModal';
-import ImageMessage from '@/components/media/ImageMessage';
+import MessageItem from '@/components/chat/MessageItem';
 import * as ImagePicker from 'expo-image-picker';
-
-interface MessageItemProps {
-  message: Message;
-  isOwnMessage: boolean;
-  showSender: boolean;
-}
-
-const MessageItem: React.FC<MessageItemProps> = ({ message, isOwnMessage, showSender }) => {
-  const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    });
-  };
-
-  const getStatusIcon = () => {
-    // Only show status for our own messages
-    if (!isOwnMessage) return '';
-    
-    switch (message.status) {
-      case 'sending':
-        return '⏳';
-      case 'sent':
-        return '✓';
-      case 'read':
-        return '✓✓';
-      default:
-        return '';
-    }
-  };
-
-  const getStatusColor = () => {
-    switch (message.status) {
-      case 'read':
-        return '#34C759'; // Green for read
-      case 'sent':
-        return 'rgba(255,255,255,0.7)'; // Light for sent
-      case 'sending':
-        return 'rgba(255,255,255,0.5)'; // Very light for sending
-      default:
-        return 'rgba(255,255,255,0.7)';
-    }
-  };
-
-  // Handle image messages
-  if (message.type === 'image' && message.imageData) {
-    return (
-      <View style={[
-        styles.messageContainer,
-        isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
-      ]}>
-        {!isOwnMessage && showSender && message.senderProfilePicture && (
-          <Image 
-            source={{ uri: message.senderProfilePicture }} 
-            style={styles.senderAvatar} 
-          />
-        )}
-        
-        <View style={styles.imageMessageWrapper}>
-          {!isOwnMessage && showSender && (
-            <Text style={styles.senderName}>
-              {message.senderDisplayName || message.senderUsername}
-            </Text>
-          )}
-          
-          <ImageMessage
-            imageData={message.imageData}
-            isOwnMessage={isOwnMessage}
-            timestamp={message.timestamp}
-            status={message.status}
-          />
-          
-          {/* Show caption if exists */}
-          {message.content && (
-            <View style={[
-              styles.captionBubble,
-              isOwnMessage ? styles.ownCaptionBubble : styles.otherCaptionBubble
-            ]}>
-              <Text style={[
-                styles.captionText,
-                isOwnMessage ? styles.ownCaptionText : styles.otherCaptionText
-              ]}>
-                {message.content}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  }
-
-  // Handle text messages (existing code)
-  return (
-    <View style={[
-      styles.messageContainer,
-      isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
-    ]}>
-      {!isOwnMessage && showSender && message.senderProfilePicture && (
-        <Image 
-          source={{ uri: message.senderProfilePicture }} 
-          style={styles.senderAvatar} 
-        />
-      )}
-      
-      <View style={[
-        styles.messageBubble,
-        isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble
-      ]}>
-        {!isOwnMessage && showSender && (
-          <Text style={styles.senderName}>
-            {message.senderDisplayName || message.senderUsername}
-          </Text>
-        )}
-        
-        <Text style={[
-          styles.messageText,
-          isOwnMessage ? styles.ownMessageText : styles.otherMessageText
-        ]}>
-          {message.content}
-        </Text>
-
-        {message.editedAt && (
-          <Text style={styles.editedText}>edited</Text>
-        )}
-        
-        <View style={styles.messageFooter}>
-          <Text style={[
-            styles.timestamp,
-            isOwnMessage ? styles.ownTimestamp : styles.otherTimestamp
-          ]}>
-            {formatTime(message.timestamp)}
-          </Text>
-          
-          {isOwnMessage && (
-            <Text style={[styles.statusIcon, { color: getStatusColor() }]}>
-              {getStatusIcon()}
-            </Text>
-          )}
-        </View>
-      </View>
-    </View>
-  );
-};
 
 export default function ChatScreen() {
   const { id: chatId } = useLocalSearchParams<{ id: string }>();
@@ -185,22 +42,40 @@ export default function ChatScreen() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
   
+  // Pagination states
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | undefined>();
+  const [allMessages, setAllMessages] = useState<Message[]>([]);
+  
   const flatListRef = useRef<FlatList>(null);
 
+  // Load initial messages and set up real-time listener
   useEffect(() => {
     if (!chatId || !user) return;
 
-    // Load chat details and check contact status
     loadChatDetails();
     checkContactStatus();
 
-    // Listen to messages with automatic read marking
-    const unsubscribe = MessageService.listenToMessages(
+    // Listen to recent messages only (for real-time updates)
+    const unsubscribe = MessageService.listenToRecentMessages(
       chatId,
-      user.uid, // Pass current user ID for read marking
-      (newMessages) => {
-        setMessages(newMessages);
+      user.uid,
+      (recentMessages) => {
+        setAllMessages(prevMessages => {
+          // Merge recent messages with older loaded messages
+          const messageIds = new Set(recentMessages.map(m => m.id));
+          const olderMessages = prevMessages.filter(m => !messageIds.has(m.id));
+          
+          // For inverted list, we want newest messages first
+          const allSorted = [...recentMessages, ...olderMessages].sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          
+          return allSorted;
+        });
         setLoading(false);
+        
         // Mark chat as read when messages are loaded
         if (isContactValid) {
           ChatService.markChatAsRead(chatId, user.uid);
@@ -210,6 +85,11 @@ export default function ChatScreen() {
 
     return unsubscribe;
   }, [chatId, user]);
+
+  // Update displayed messages when allMessages changes
+  useEffect(() => {
+    setMessages(allMessages);
+  }, [allMessages]);
 
   const loadChatDetails = async () => {
     if (!chatId) return;
@@ -227,36 +107,68 @@ export default function ChatScreen() {
     
     setCheckingContact(true);
     try {
-      // Get the other participant's UID
       const otherParticipant = getOtherParticipant();
       if (!otherParticipant) {
         setIsContactValid(false);
         return;
       }
 
-      // Check if they're still contacts
       const stillContacts = await isContact(user.uid, otherParticipant.uid);
       setIsContactValid(stillContacts);
     } catch (error) {
       console.error('Error checking contact status:', error);
-      // On error, assume contact is valid to avoid blocking functionality
       setIsContactValid(true);
     } finally {
       setCheckingContact(false);
     }
   };
 
-  // Check contact status whenever chat changes
   useEffect(() => {
     if (chat) {
       checkContactStatus();
     }
   }, [chat]);
 
+  // Load older messages when user scrolls to bottom (in inverted list)
+  const loadOlderMessages = useCallback(async () => {
+    if (!chatId || !hasMoreMessages || loadingOlderMessages) return;
+
+    setLoadingOlderMessages(true);
+    
+    try {
+      const result: MessagesPaginationResult = await MessageService.loadOlderMessages(
+        chatId,
+        lastDoc
+      );
+
+      if (result.messages.length > 0) {
+        setAllMessages(prevMessages => {
+          // Add older messages to the end (they'll appear at bottom in inverted list)
+          const messageIds = new Set(prevMessages.map(m => m.id));
+          const newOlderMessages = result.messages.filter(m => !messageIds.has(m.id));
+          
+          // Sort older messages and add to end
+          const sortedOlderMessages = newOlderMessages.sort(
+            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          );
+          
+          return [...prevMessages, ...sortedOlderMessages];
+        });
+        
+        setLastDoc(result.lastDoc);
+      }
+      
+      setHasMoreMessages(result.hasMore);
+    } catch (error) {
+      ErrorService.handleError(error, 'Load Older Messages');
+    } finally {
+      setLoadingOlderMessages(false);
+    }
+  }, [chatId, lastDoc, hasMoreMessages, loadingOlderMessages]);
+
   const sendMessage = async () => {
     if (!inputText.trim() || !user || !chatId || sending) return;
 
-    // Check if contact is still valid before sending
     if (!isContactValid) {
       Alert.alert(
         'Cannot Send Message',
@@ -271,20 +183,16 @@ export default function ChatScreen() {
     setSending(true);
 
     try {
-      // Get current user profile for username
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
-      // Send message
       await MessageService.sendMessage(chatId, user.uid, {
         content: messageContent,
         type: 'text',
       });
 
-      // Update last message in chat
       await ChatService.updateLastMessage(chatId, user.uid, senderUsername, messageContent);
 
-      // Increment unread count for other participants
       if (chat) {
         const otherParticipants = chat.participants.filter(p => p !== user.uid);
         await Promise.all(
@@ -293,14 +201,8 @@ export default function ChatScreen() {
           )
         );
       }
-
-      // Scroll to bottom
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
     } catch (error) {
       ErrorService.handleError(error, 'Send Message');
-      // Restore message text on error
       setInputText(messageContent);
     } finally {
       setSending(false);
@@ -310,7 +212,6 @@ export default function ChatScreen() {
   const handleImageSelected = async (image: ImagePicker.ImagePickerAsset) => {
     if (!user || !chatId || sendingImage) return;
 
-    // Check if contact is still valid before sending
     if (!isContactValid) {
       Alert.alert(
         'Cannot Send Image',
@@ -323,17 +224,12 @@ export default function ChatScreen() {
     setSendingImage(true);
     
     try {
-      // Get current user profile for username
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
-      // Send image message
       await MessageService.sendImageMessage(chatId, user.uid, image.uri);
-
-      // Update last message in chat
       await ChatService.updateLastMessage(chatId, user.uid, senderUsername, '📷 Photo', 'image');
 
-      // Increment unread count for other participants
       if (chat) {
         const otherParticipants = chat.participants.filter(p => p !== user.uid);
         await Promise.all(
@@ -342,11 +238,6 @@ export default function ChatScreen() {
           )
         );
       }
-
-      // Scroll to bottom
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
     } catch (error) {
       ErrorService.handleError(error, 'Send Image');
     } finally {
@@ -354,10 +245,12 @@ export default function ChatScreen() {
     }
   };
 
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+  // Optimized render function with keyExtractor (adjusted for inverted list)
+  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isOwnMessage = item.senderId === user?.uid;
-    const previousMessage = index > 0 ? messages[index - 1] : null;
-    const showSender = !previousMessage || previousMessage.senderId !== item.senderId;
+    // In inverted list, next message is at index + 1
+    const nextMessage = index < messages.length - 1 ? messages[index + 1] : null;
+    const showSender = !nextMessage || nextMessage.senderId !== item.senderId;
 
     return (
       <MessageItem
@@ -366,7 +259,17 @@ export default function ChatScreen() {
         showSender={showSender}
       />
     );
-  };
+  }, [messages, user]);
+
+  // Optimized key extractor
+  const keyExtractor = useCallback((item: Message) => item.id, []);
+
+  // Handle reaching end (which is bottom in inverted list) for pagination
+  const handleEndReached = useCallback(() => {
+    if (hasMoreMessages && !loadingOlderMessages) {
+      loadOlderMessages();
+    }
+  }, [hasMoreMessages, loadingOlderMessages, loadOlderMessages]);
 
   const getOtherParticipant = () => {
     if (!chat || !user) return null;
@@ -422,16 +325,33 @@ export default function ChatScreen() {
         </View>
       </View>
 
-      {/* Messages List */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
-        style={styles.messagesList}
-        contentContainerStyle={styles.messagesContent}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-      />
+      {/* Messages List with Pagination - INVERTED */}
+      <View style={styles.messagesContainer}>
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          renderItem={renderMessage}
+          keyExtractor={keyExtractor}
+          style={styles.messagesList}
+          contentContainerStyle={styles.messagesContent}
+          inverted={true} // This is the key - inverted list
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.1}
+          ListFooterComponent={
+            loadingOlderMessages ? (
+              <View style={styles.loadingOlderContainer}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.loadingOlderText}>Loading older messages...</Text>
+              </View>
+            ) : null
+          }
+          removeClippedSubviews={true} // Performance optimization
+          maxToRenderPerBatch={10} // Render fewer items per batch
+          updateCellsBatchingPeriod={50} // Update batching period
+          windowSize={10} // Reduce window size
+          initialNumToRender={15} // Reduce initial render count
+        />
+      </View>
 
       {/* Contact Status Warning */}
       {!isContactValid && (
@@ -509,7 +429,6 @@ export default function ChatScreen() {
   );
 }
 
-// Keep all the existing styles and add new ones for images
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -574,86 +493,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
+  messagesContainer: {
+    flex: 1,
+  },
+  loadingOlderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    backgroundColor: '#f8f9fa',
+  },
+  loadingOlderText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: '#666',
+  },
   messagesList: {
     flex: 1,
   },
   messagesContent: {
     paddingVertical: 8,
-  },
-  messageContainer: {
-    flexDirection: 'row',
-    marginVertical: 2,
-    paddingHorizontal: 16,
-  },
-  ownMessageContainer: {
-    justifyContent: 'flex-end',
-  },
-  otherMessageContainer: {
-    justifyContent: 'flex-start',
-  },
-  senderAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-    alignSelf: 'flex-end',
-  },
-  messageBubble: {
-    maxWidth: '75%',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginVertical: 1,
-  },
-  ownMessageBubble: {
-    backgroundColor: '#007AFF',
-    borderBottomRightRadius: 4,
-  },
-  otherMessageBubble: {
-    backgroundColor: '#f0f0f0',
-    borderBottomLeftRadius: 4,
-  },
-  senderName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 2,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  ownMessageText: {
-    color: '#fff',
-  },
-  otherMessageText: {
-    color: '#333',
-  },
-  editedText: {
-    fontSize: 11,
-    color: '#999',
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
-  messageFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  timestamp: {
-    fontSize: 11,
-    flex: 1,
-  },
-  ownTimestamp: {
-    color: 'rgba(255,255,255,0.7)',
-  },
-  otherTimestamp: {
-    color: '#999',
-  },
-  statusIcon: {
-    fontSize: 11,
-    marginLeft: 4,
-    fontWeight: 'bold',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -741,34 +600,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     fontStyle: 'italic',
-  },
-  // New styles for image messages
-  imageMessageWrapper: {
-    maxWidth: '75%',
-  },
-  captionBubble: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginTop: 4,
-  },
-  ownCaptionBubble: {
-    backgroundColor: '#007AFF',
-    borderBottomRightRadius: 4,
-  },
-  otherCaptionBubble: {
-    backgroundColor: '#f0f0f0',
-    borderBottomLeftRadius: 4,
-  },
-  captionText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  ownCaptionText: {
-    color: '#fff',
-  },
-  otherCaptionText: {
-    color: '#333',
   },
   sendingImageOverlay: {
     position: 'absolute',

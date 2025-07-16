@@ -1,4 +1,4 @@
-// services/messageService.ts 
+// services/messageService.ts
 
 import { 
   collection, 
@@ -15,7 +15,10 @@ import {
   getDocs,
   where,
   Timestamp,
-  writeBatch
+  writeBatch,
+  startAfter,
+  QueryDocumentSnapshot,
+  DocumentData
 } from 'firebase/firestore';
 import { db } from '@/config/firebaseConfig';
 import { Message, SendMessageData } from '@/types/messageTypes';
@@ -24,7 +27,17 @@ import { getUserProfile } from '@/services/userService';
 import { ImageService } from '@/services/imageService';
 import { arrayUnion as firestoreArrayUnion } from 'firebase/firestore';
 
+export interface MessagesPaginationResult {
+  messages: Message[];
+  hasMore: boolean;
+  lastDoc?: QueryDocumentSnapshot<DocumentData>;
+}
+
 export class MessageService {
+  // Reduced initial load for better performance
+  private static DEFAULT_MESSAGE_LIMIT = 25;
+  private static PAGINATION_LIMIT = 20;
+
   /**
    * Send a new message to a chat (supports text and images)
    */
@@ -157,13 +170,14 @@ export class MessageService {
   }
 
   /**
-   * Listen to messages in a chat (real-time) with automatic read marking
+   * Listen to recent messages in a chat (real-time) with automatic read marking
+   * Only loads the most recent messages for real-time updates
    */
-  static listenToMessages(
+  static listenToRecentMessages(
     chatId: string,
     currentUserId: string,
     callback: (messages: Message[]) => void,
-    messageLimit: number = 50
+    messageLimit: number = this.DEFAULT_MESSAGE_LIMIT
   ): () => void {
     try {
       const messagesRef = collection(db, 'chats', chatId, 'messages');
@@ -223,6 +237,64 @@ export class MessageService {
   }
 
   /**
+   * Load older messages with pagination (for "Load More" functionality)
+   */
+  static async loadOlderMessages(
+    chatId: string,
+    lastDoc?: QueryDocumentSnapshot<DocumentData>,
+    messageLimit: number = this.PAGINATION_LIMIT
+  ): Promise<MessagesPaginationResult> {
+    try {
+      const messagesRef = collection(db, 'chats', chatId, 'messages');
+      
+      let q = query(
+        messagesRef,
+        orderBy('timestamp', 'desc'),
+        limit(messageLimit)
+      );
+
+      // If we have a lastDoc (cursor), start after it
+      if (lastDoc) {
+        q = query(
+          messagesRef,
+          orderBy('timestamp', 'desc'),
+          startAfter(lastDoc),
+          limit(messageLimit)
+        );
+      }
+
+      const snapshot = await getDocs(q);
+      
+      const messages: Message[] = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          timestamp: data.timestamp instanceof Timestamp 
+            ? data.timestamp.toDate().toISOString()
+            : data.timestamp,
+        } as Message;
+      }).reverse(); // Reverse to show oldest first
+
+      // Get the last document for pagination cursor
+      const newLastDoc = snapshot.docs[snapshot.docs.length - 1];
+      const hasMore = snapshot.docs.length === messageLimit;
+
+      return {
+        messages,
+        hasMore,
+        lastDoc: newLastDoc,
+      };
+    } catch (error) {
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Failed to load older messages',
+        error
+      );
+    }
+  }
+
+  /**
    * Calculate message status based on readBy array
    */
   private static calculateMessageStatus(message: Message, currentUserId: string): 'sent' | 'read' {
@@ -259,43 +331,6 @@ export class MessageService {
     } catch (error) {
       console.error('Error marking messages as read:', error);
       // Don't throw error here to avoid disrupting the chat experience
-    }
-  }
-
-  /**
-   * Load older messages (pagination)
-   */
-  static async loadOlderMessages(
-    chatId: string,
-    beforeTimestamp: string,
-    messageLimit: number = 20
-  ): Promise<Message[]> {
-    try {
-      const messagesRef = collection(db, 'chats', chatId, 'messages');
-      const q = query(
-        messagesRef,
-        orderBy('timestamp', 'desc'),
-        where('timestamp', '<', new Date(beforeTimestamp)),
-        limit(messageLimit)
-      );
-
-      const snapshot = await getDocs(q);
-      return snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp instanceof Timestamp 
-            ? data.timestamp.toDate().toISOString()
-            : data.timestamp,
-        } as Message;
-      }).reverse();
-    } catch (error) {
-      throw new AppError(
-        ErrorType.STORAGE,
-        'Failed to load older messages',
-        error
-      );
     }
   }
 
@@ -342,13 +377,6 @@ export class MessageService {
         error
       );
     }
-  }
-
-  /**
-   * Generate a unique message ID (not needed anymore since addDoc auto-generates)
-   */
-  private static generateMessageId(): string {
-    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }
 
