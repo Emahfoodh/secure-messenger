@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
 import { generateQRData } from "@/services/qrService";
+import BiometricSettings from "@/components/BiometricSettings";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -34,7 +35,6 @@ export default function ProfileScreen() {
       loadUserProfile();
     }
   }, [user]);
-
 
   const QRCodeModal = () => {
     if (!profile) return null;
@@ -194,6 +194,10 @@ export default function ProfileScreen() {
             <Text style={styles.value}>{bio || "Not set"}</Text>
           )}
         </View>
+
+        {/* Add BiometricSettings here */}
+        <BiometricSettings />
+
         <View style={styles.buttons}>
           {editing ? (
             <View style={styles.editButtons}>
