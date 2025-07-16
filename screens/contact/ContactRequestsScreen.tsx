@@ -18,6 +18,7 @@ import {
   declineContactRequest,
   cancelContactRequest,
 } from '@/services/contactService';
+import { ErrorService } from '@/services/errorService';
 
 type RequestTabType = 'incoming' | 'outgoing';
 
@@ -142,9 +143,10 @@ export default function ContactRequestsScreen() {
       setIncomingRequests(incoming);
       setOutgoingRequests(outgoing);
     } catch (error) {
-      console.error('Error loading requests:', error);
+      ErrorService.handleError(error, 'Contact Requests');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const onRefresh = async () => {
@@ -155,28 +157,28 @@ export default function ContactRequestsScreen() {
 
   const handleAcceptRequest = async (request: ContactRequest) => {
     setActionLoading(true);
-    const success = await acceptContactRequest(request);
-    
-    if (success) {
+    try {
+      await acceptContactRequest(request);
       Alert.alert('Success', `${request.fromUsername} has been added to your contacts!`);
       await loadRequests(); // Refresh the list
-    } else {
-      Alert.alert('Error', 'Failed to accept contact request');
+    } catch (error) {
+      ErrorService.handleError(error, 'Accept Request');
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const handleDeclineRequest = async (requestId: string) => {
     setActionLoading(true);
-    const success = await declineContactRequest(requestId);
-    
-    if (success) {
+    try {
+      await declineContactRequest(requestId);
       Alert.alert('Success', 'Contact request declined');
       await loadRequests(); // Refresh the list
-    } else {
-      Alert.alert('Error', 'Failed to decline contact request');
+    } catch (error) {
+      ErrorService.handleError(error, 'Decline Request');
+    } finally {
+      setActionLoading(false);
     }
-    setActionLoading(false);
   };
 
   const handleCancelRequest = async (requestId: string) => {
@@ -190,15 +192,15 @@ export default function ContactRequestsScreen() {
           style: 'destructive',
           onPress: async () => {
             setActionLoading(true);
-            const success = await cancelContactRequest(requestId);
-            
-            if (success) {
+            try {
+              await cancelContactRequest(requestId);
               Alert.alert('Success', 'Contact request cancelled');
               await loadRequests(); // Refresh the list
-            } else {
-              Alert.alert('Error', 'Failed to cancel contact request');
+            } catch (error) {
+              ErrorService.handleError(error, 'Cancel Request');
+            } finally {
+              setActionLoading(false);
             }
-            setActionLoading(false);
           }
         }
       ]

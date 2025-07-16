@@ -1,3 +1,4 @@
+import { AppError, ErrorType } from './errorService';
 import { UserProfile } from './userService';
 
 export interface QRUserData {
@@ -24,7 +25,10 @@ export const parseQRData = (qrString: string): QRUserData | null => {
     }
     return null;
   } catch (error) {
-    console.error('Error parsing QR data:', error);
-    return null;
+    throw new AppError(
+      ErrorType.VALIDATION,
+      'Invalid QR code format',
+      error
+    );
   }
 };

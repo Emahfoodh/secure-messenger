@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Switch,
   Alert,
 } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { BiometricService } from '@/services/biometricService';
+import { ErrorService } from '@/services/errorService';
 
 export default function BiometricSettings() {
   const { biometricEnabled, setBiometricEnabled, authenticateWithBiometrics } = useAuth();
@@ -20,22 +20,32 @@ export default function BiometricSettings() {
   }, []);
 
   const loadBiometricDescription = async () => {
-    const description = await BiometricService.getBiometricDescription();
-    setBiometricDescription(description);
+    try {
+      const description = await BiometricService.getBiometricDescription();
+      setBiometricDescription(description);
+    } catch (error) {
+      ErrorService.handleError(error, 'Biometric Settings');
+      setBiometricDescription('Unable to check biometric capabilities');
+    }
   };
 
   const handleToggleBiometric = async (enabled: boolean) => {
     if (enabled) {
       // Test biometric authentication before enabling
       setLoading(true);
-      const success = await authenticateWithBiometrics();
-      setLoading(false);
+      try {
+        const success = await authenticateWithBiometrics();
 
-      if (success) {
-        await setBiometricEnabled(true);
-        Alert.alert('Success', 'Biometric authentication has been enabled.');
-      } else {
-        Alert.alert('Failed', 'Biometric authentication test failed.');
+        if (success) {
+          await setBiometricEnabled(true);
+          Alert.alert('Success', 'Biometric authentication has been enabled.');
+        } else {
+          Alert.alert('Failed', 'Biometric authentication test failed.');
+        }
+      } catch (error) {
+        ErrorService.handleError(error, 'Biometric Settings');
+      } finally {
+        setLoading(false);
       }
     } else {
       // Disable biometric authentication
@@ -48,8 +58,12 @@ export default function BiometricSettings() {
             text: 'Disable',
             style: 'destructive',
             onPress: async () => {
-              await setBiometricEnabled(false);
-              Alert.alert('Disabled', 'Biometric authentication has been disabled.');
+              try {
+                await setBiometricEnabled(false);
+                Alert.alert('Disabled', 'Biometric authentication has been disabled.');
+              } catch (error) {
+                ErrorService.handleError(error, 'Biometric Settings');
+              }
             },
           },
         ]

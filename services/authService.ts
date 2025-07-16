@@ -5,10 +5,10 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebaseConfig';
+import { AppError, ErrorType } from '@/services/errorService';
 
 export interface AuthResult {
   success: boolean;
-  error?: string;
   user?: any;
 }
 
@@ -33,7 +33,11 @@ export const signUp = async (
 
     return { success: true, user };
   } catch (error: any) {
-    return { success: false, error: getAuthErrorMessage(error) };
+    throw new AppError(
+      ErrorType.AUTH,
+      getAuthErrorMessage(error),
+      error
+    );
   }
 };
 
@@ -42,23 +46,33 @@ export const signIn = async (email: string, password: string): Promise<AuthResul
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     return { success: true, user: userCredential.user };
   } catch (error: any) {
-    return { success: false, error: getAuthErrorMessage(error) };
+    throw new AppError(
+      ErrorType.AUTH,
+      getAuthErrorMessage(error),
+      error
+    );
   }
 };
 
 const getAuthErrorMessage = (error: AuthError): string => {
   switch (error.code) {
     case 'auth/user-not-found':
-      return 'No account found with this email.';
+      return 'No account found with this email';
     case 'auth/wrong-password':
-      return 'Incorrect password.';
+      return 'Incorrect password';
     case 'auth/email-already-in-use':
-      return 'An account with this email already exists.';
+      return 'An account with this email already exists';
     case 'auth/weak-password':
-      return 'Password should be at least 6 characters.';
+      return 'Password must be at least 6 characters';
     case 'auth/invalid-email':
-      return 'Invalid email address.';
+      return 'Invalid email address';
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later';
+    case 'auth/network-request-failed':
+      return 'Network error. Please check your connection';
+    case 'auth/invalid-credential':
+      return 'Invalid email or password';
     default:
-      return 'An error occurred. Please try again.';
+      return 'Authentication failed. Please try again';
   }
 };

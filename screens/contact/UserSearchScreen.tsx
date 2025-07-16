@@ -16,6 +16,7 @@ import {
   isContact, 
   checkExistingRequest 
 } from '@/services/contactService';
+import { ErrorService } from '@/services/errorService';
 
 interface UserSearchItemProps {
   user: UserProfile;
@@ -117,64 +118,75 @@ export default function UserSearchScreen() {
     }
 
     setSearching(true);
-    const results = await searchUsersByUsername(query.trim());
-    
-    // Filter out current user from results
-    const filteredResults = results.filter(result => result.uid !== user?.uid);
-    
-    // Check status for each user (contact, request sent, request received, etc.)
-    const states: { [key: string]: 'send' | 'sent' | 'contact' | 'incoming' } = {};
-    if (user) {
-      for (const result of filteredResults) {
-        // Check if already a contact
-        const alreadyContact = await isContact(user.uid, result.uid);
-        if (alreadyContact) {
-          states[result.uid] = 'contact';
-          continue;
-        }
+    try {
+      const results = await searchUsersByUsername(query.trim());
+      
+      // Filter out current user from results
+      const filteredResults = results.filter(result => result.uid !== user?.uid);
+      
+      // Check status for each user (contact, request sent, request received, etc.)
+      const states: { [key: string]: 'send' | 'sent' | 'contact' | 'incoming' } = {};
+      if (user) {
+        for (const result of filteredResults) {
+          try {
+            // Check if already a contact
+            const alreadyContact = await isContact(user.uid, result.uid);
+            if (alreadyContact) {
+              states[result.uid] = 'contact';
+              continue;
+            }
 
-        // Check for existing requests
-        const existingRequest = await checkExistingRequest(user.uid, result.uid);
-        if (existingRequest) {
-          if (existingRequest.fromUid === user.uid) {
-            states[result.uid] = 'sent'; // We sent them a request
-          } else {
-            states[result.uid] = 'incoming'; // They sent us a request
+            // Check for existing requests
+            const existingRequest = await checkExistingRequest(user.uid, result.uid);
+            if (existingRequest) {
+              if (existingRequest.fromUid === user.uid) {
+                states[result.uid] = 'sent'; // We sent them a request
+              } else {
+                states[result.uid] = 'incoming'; // They sent us a request
+              }
+            } else {
+              states[result.uid] = 'send'; // Can send a new request
+            }
+          } catch (error) {
+            ErrorService.handleError(error, 'User Search Status Check');
+            states[result.uid] = 'send'; // Default to send on error
           }
-        } else {
-          states[result.uid] = 'send'; // Can send a new request
         }
       }
+      
+      setButtonStates(states);
+      setSearchResults(filteredResults);
+    } catch (error) {
+      ErrorService.handleError(error, 'User Search');
+    } finally {
+      setSearching(false);
     }
-    
-    setButtonStates(states);
-    setSearchResults(filteredResults);
-    setSearching(false);
   };
 
   const handleSendRequest = async (targetUser: UserProfile) => {
     if (!user) return;
 
-    // Get current user profile to send with request
-    const currentUserProfile = await getUserProfile(user.uid);
-    if (!currentUserProfile) {
-      Alert.alert('Error', 'Could not load your profile information');
-      return;
-    }
+    try {
+      // Get current user profile to send with request
+      const currentUserProfile = await getUserProfile(user.uid);
+      if (!currentUserProfile) {
+        Alert.alert('Error', 'Could not load your profile information');
+        return;
+      }
 
-    setSendingRequest(targetUser.uid);
-    const success = await sendContactRequest(currentUserProfile, targetUser);
-    setSendingRequest(null);
-    
-    if (success) {
+      setSendingRequest(targetUser.uid);
+      await sendContactRequest(currentUserProfile, targetUser);
+      
       Alert.alert('Success', `Contact request sent to ${targetUser.username}!`);
       // Update button state
       setButtonStates(prev => ({
         ...prev,
         [targetUser.uid]: 'sent'
       }));
-    } else {
-      Alert.alert('Error', 'Failed to send contact request');
+    } catch (error) {
+      ErrorService.handleError(error, 'Send Contact Request');
+    } finally {
+      setSendingRequest(null);
     }
   };
 

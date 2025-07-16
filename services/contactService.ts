@@ -12,6 +12,7 @@ import {
   updateDoc
 } from 'firebase/firestore';
 import { UserProfile } from './userService';
+import { AppError, ErrorType } from '@/services/errorService';
 
 export interface Contact {
   uid: string;
@@ -49,7 +50,7 @@ const removeUndefinedFields = (obj: any): any => {
 export const sendContactRequest = async (
   fromUser: UserProfile, 
   toUser: UserProfile
-): Promise<boolean> => {
+): Promise<void> => {
   try {
     const requestId = `${fromUser.uid}_${toUser.uid}`;
     
@@ -68,10 +69,12 @@ export const sendContactRequest = async (
     const cleanedData = removeUndefinedFields(requestData);
 
     await setDoc(doc(db, 'contactRequests', requestId), cleanedData);
-    return true;
   } catch (error) {
-    console.error('Error sending contact request:', error);
-    return false;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to send contact request',
+      error
+    );
   }
 };
 
@@ -90,8 +93,11 @@ export const getIncomingRequests = async (userUid: string): Promise<ContactReque
       ...doc.data()
     } as ContactRequest));
   } catch (error) {
-    console.error('Error fetching incoming requests:', error);
-    return [];
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to load incoming requests',
+      error
+    );
   }
 };
 
@@ -110,8 +116,11 @@ export const getOutgoingRequests = async (userUid: string): Promise<ContactReque
       ...doc.data()
     } as ContactRequest));
   } catch (error) {
-    console.error('Error fetching outgoing requests:', error);
-    return [];
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to load outgoing requests',
+      error
+    );
   }
 };
 
@@ -140,20 +149,26 @@ export const checkExistingRequest = async (
     
     return null;
   } catch (error) {
-    console.error('Error checking existing request:', error);
-    return null;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to check existing request',
+      error
+    );
   }
 };
 
 // Accept a contact request
-export const acceptContactRequest = async (request: ContactRequest): Promise<boolean> => {
+export const acceptContactRequest = async (request: ContactRequest): Promise<void> => {
   try {
     // Add both users as contacts to each other
     const fromUserDoc = await getDoc(doc(db, 'users', request.fromUid));
     const toUserDoc = await getDoc(doc(db, 'users', request.toUid));
     
     if (!fromUserDoc.exists() || !toUserDoc.exists()) {
-      return false;
+      throw new AppError(
+        ErrorType.STORAGE,
+        'User information not found'
+      );
     }
     
     const fromUserData = fromUserDoc.data() as UserProfile;
@@ -182,37 +197,45 @@ export const acceptContactRequest = async (request: ContactRequest): Promise<boo
         respondedAt: new Date().toISOString()
       })
     ]);
-    
-    return true;
   } catch (error) {
-    console.error('Error accepting contact request:', error);
-    return false;
+    if (error instanceof AppError) {
+      throw error;
+    }
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to accept contact request',
+      error
+    );
   }
 };
 
 // Decline a contact request
-export const declineContactRequest = async (requestId: string): Promise<boolean> => {
+export const declineContactRequest = async (requestId: string): Promise<void> => {
   try {
     await deleteDoc(doc(db, 'contactRequests', requestId));
-    return true;
   } catch (error) {
-    console.error('Error declining contact request:', error);
-    return false;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to decline contact request',
+      error
+    );
   }
 };
 
 // Cancel an outgoing contact request
-export const cancelContactRequest = async (requestId: string): Promise<boolean> => {
+export const cancelContactRequest = async (requestId: string): Promise<void> => {
   try {
     await deleteDoc(doc(db, 'contactRequests', requestId));
-    return true;
   } catch (error) {
-    console.error('Error canceling contact request:', error);
-    return false;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to cancel contact request',
+      error
+    );
   }
 };
 
-export const removeContact = async (currentUserUid: string, contactUid: string): Promise<boolean> => {
+export const removeContact = async (currentUserUid: string, contactUid: string): Promise<void> => {
   try {
     // Generate both possible request IDs (bidirectional)
     const requestId1 = `${currentUserUid}_${contactUid}`;
@@ -251,11 +274,12 @@ export const removeContact = async (currentUserUid: string, contactUid: string):
     if (deletePromises.length > 0) {
       await Promise.all(deletePromises);
     }
-    
-    return true;
   } catch (error) {
-    console.error('Error removing contact:', error);
-    return false;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to remove contact',
+      error
+    );
   }
 };
 
@@ -266,8 +290,11 @@ export const getContacts = async (userUid: string): Promise<Contact[]> => {
     
     return querySnapshot.docs.map(doc => doc.data() as Contact);
   } catch (error) {
-    console.error('Error fetching contacts:', error);
-    return [];
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to load contacts',
+      error
+    );
   }
 };
 
@@ -276,7 +303,10 @@ export const isContact = async (currentUserUid: string, targetUserUid: string): 
     const contactDoc = await getDoc(doc(db, 'users', currentUserUid, 'contacts', targetUserUid));
     return contactDoc.exists();
   } catch (error) {
-    console.error('Error checking contact status:', error);
-    return false;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to check contact status',
+      error
+    );
   }
 };

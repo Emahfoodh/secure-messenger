@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { getContacts, removeContact, Contact } from '@/services/contactService';
+import { ErrorService } from '@/services/errorService';
 import UserSearchScreen from '@/screens/contact/UserSearchScreen';
 import QRScannerScreen from '@/screens/contact/QRScannerScreen';
 import ContactRequestsScreen from '@/screens/contact/ContactRequestsScreen';
-import { reload } from 'expo-router/build/global-state/routing';
 
 type TabType = 'contacts' | 'requests' | 'search' | 'scan';
 
@@ -76,20 +76,25 @@ export default function ContactsScreen() {
     if (!user) return;
     
     setLoading(true);
-    const userContacts = await getContacts(user.uid);
-    setContacts(userContacts);
-    setLoading(false);
+    try {
+      const userContacts = await getContacts(user.uid);
+      setContacts(userContacts);
+    } catch (error) {
+      ErrorService.handleError(error, 'Contacts');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleRemoveContact = async (contact: Contact) => {
     if (!user) return;
 
-    const success = await removeContact(user.uid, contact.uid);
-    if (success) {
+    try {
+      await removeContact(user.uid, contact.uid);
       Alert.alert('Success', `${contact.username} removed from contacts`);
       await loadContacts();
-    } else {
-      Alert.alert('Error', 'Failed to remove contact');
+    } catch (error) {
+      ErrorService.handleError(error, 'Remove Contact');
     }
   };
 

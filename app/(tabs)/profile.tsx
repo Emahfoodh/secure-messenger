@@ -1,4 +1,7 @@
+import BiometricSettings from "@/components/BiometricSettings";
 import { useAuth } from "@/context/AuthContext";
+import { ErrorService } from "@/services/errorService";
+import { generateQRData } from "@/services/qrService";
 import {
   getUserProfile,
   updateUserProfile,
@@ -18,8 +21,6 @@ import {
   View,
 } from "react-native";
 import QRCode from "react-native-qrcode-svg";
-import { generateQRData } from "@/services/qrService";
-import BiometricSettings from "@/components/BiometricSettings";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -39,6 +40,14 @@ export default function ProfileScreen() {
   const QRCodeModal = () => {
     if (!profile) return null;
 
+    let qrValue: string;
+    try {
+      qrValue = generateQRData(profile);
+    } catch (error) {
+      ErrorService.handleError(error, "Generate QR Code");
+      return null;
+    }
+
     return (
       <View style={styles.qrModal}>
         <View style={styles.qrContainer}>
@@ -47,7 +56,7 @@ export default function ProfileScreen() {
 
           <View style={styles.qrCodeWrapper}>
             <QRCode
-              value={generateQRData(profile)}
+              value={qrValue}
               size={200}
               backgroundColor="white"
               color="black"
@@ -68,11 +77,15 @@ export default function ProfileScreen() {
   const loadUserProfile = async () => {
     if (!user) return;
 
-    const userProfile = await getUserProfile(user.uid);
-    if (userProfile) {
-      setProfile(userProfile);
-      setDisplayName(userProfile.displayName || "");
-      setBio(userProfile.bio || "");
+    try {
+      const userProfile = await getUserProfile(user.uid);
+      if (userProfile) {
+        setProfile(userProfile);
+        setDisplayName(userProfile.displayName || "");
+        setBio(userProfile.bio || "");
+      }
+    } catch (error) {
+      ErrorService.handleError(error, "Load Profile");
     }
   };
 
@@ -95,15 +108,19 @@ export default function ProfileScreen() {
 
     if (!result.canceled && user) {
       setLoading(true);
-      const imageUrl = await uploadProfilePicture(
-        user.uid,
-        result.assets[0].uri
-      );
-      if (imageUrl) {
+      try {
+        const imageUrl = await uploadProfilePicture(
+          user.uid,
+          result.assets[0].uri
+        );
+
         await updateUserProfile(user.uid, { profilePicture: imageUrl });
         await loadUserProfile();
+      } catch (error) {
+        ErrorService.handleError(error, "Upload Profile Picture");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
   };
 
@@ -111,21 +128,21 @@ export default function ProfileScreen() {
     if (!user) return;
 
     setLoading(true);
-    const success = await updateUserProfile(user.uid, {
-      displayName,
-      bio,
-    });
+    try {
+      await updateUserProfile(user.uid, {
+        displayName,
+        bio,
+      });
 
-    if (success) {
       Alert.alert("Success", "Profile updated successfully");
       setEditing(false);
       await loadUserProfile();
-    } else {
-      Alert.alert("Error", "Failed to update profile");
+    } catch (error) {
+      ErrorService.handleError(error, "Update Profile");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
-
   if (!profile) {
     return (
       <View style={styles.container}>

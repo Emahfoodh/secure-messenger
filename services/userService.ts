@@ -1,6 +1,7 @@
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/config/firebaseConfig';
+import { AppError, ErrorType } from '@/services/errorService';
 
 export interface UserProfile {
   uid: string;
@@ -22,24 +23,36 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
     }
     return null;
   } catch (error) {
-    console.error('Error fetching user profile:', error);
-    return null;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to load user profile',
+      error
+    );
   }
 };
 
-export const updateUserProfile = async (uid: string, updates: Partial<UserProfile>): Promise<boolean> => {
+export const updateUserProfile = async (uid: string, updates: Partial<UserProfile>): Promise<void> => {
   try {
     await updateDoc(doc(db, 'users', uid), updates);
-    return true;
   } catch (error) {
-    console.error('Error updating user profile:', error);
-    return false;
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to update user profile',
+      error
+    );
   }
 };
 
-export const uploadProfilePicture = async (uid: string, imageUri: string): Promise<string | null> => {
+export const uploadProfilePicture = async (uid: string, imageUri: string): Promise<string> => {
   try {
     const response = await fetch(imageUri);
+    if (!response.ok) {
+      throw new AppError(
+        ErrorType.NETWORK,
+        'Failed to load image for upload'
+      );
+    }
+    
     const blob = await response.blob();
     
     const imageRef = ref(storage, `profile-pictures/${uid}`);
@@ -48,8 +61,15 @@ export const uploadProfilePicture = async (uid: string, imageUri: string): Promi
     const downloadURL = await getDownloadURL(imageRef);
     return downloadURL;
   } catch (error) {
-    console.error('Error uploading profile picture:', error);
-    return null;
+    if (error instanceof AppError) {
+      throw error;
+    }
+    
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to upload profile picture',
+      error
+    );
   }
 };
 
@@ -64,7 +84,10 @@ export const searchUsersByUsername = async (searchTerm: string): Promise<UserPro
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => doc.data() as UserProfile);
   } catch (error) {
-    console.error('Error searching users:', error);
-    return [];
+    throw new AppError(
+      ErrorType.STORAGE,
+      'Failed to search users',
+      error
+    );
   }
 };

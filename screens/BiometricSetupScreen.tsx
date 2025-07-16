@@ -5,10 +5,10 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
-  Image,
   ScrollView,
 } from 'react-native';
 import { BiometricService, BiometricCapabilities } from '@/services/biometricService';
+import { ErrorService } from '@/services/errorService';
 
 interface BiometricSetupScreenProps {
   onSetupComplete: () => void;
@@ -25,9 +25,20 @@ export default function BiometricSetupScreen({ onSetupComplete }: BiometricSetup
 
   const checkCapabilities = async () => {
     setLoading(true);
-    const caps = await BiometricService.checkBiometricCapabilities();
-    setCapabilities(caps);
-    setLoading(false);
+    try {
+      const caps = await BiometricService.checkBiometricCapabilities();
+      setCapabilities(caps);
+    } catch (error) {
+      ErrorService.handleError(error, 'Biometric Setup');
+      // Set default capabilities on error
+      setCapabilities({
+        hasHardware: false,
+        isEnrolled: false,
+        availableTypes: [],
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEnableBiometrics = async () => {
@@ -41,14 +52,12 @@ export default function BiometricSetupScreen({ onSetupComplete }: BiometricSetup
     }
 
     setTesting(true);
-    const result = await BiometricService.authenticateAsync({
-      promptMessage: 'Test your biometric authentication',
-      cancelLabel: 'Cancel',
-    });
+    try {
+      const result = await BiometricService.authenticateAsync({
+        promptMessage: 'Test your biometric authentication',
+        cancelLabel: 'Cancel',
+      });
 
-    setTesting(false);
-
-    if (result.success) {
       await BiometricService.setBiometricEnabled(true);
       await BiometricService.setBiometricSetupCompleted(true);
       
@@ -62,25 +71,31 @@ export default function BiometricSetupScreen({ onSetupComplete }: BiometricSetup
           },
         ]
       );
-    } else {
-      Alert.alert('Authentication Failed', result.error || 'Please try again.');
+    } catch (error) {
+      ErrorService.handleError(error, 'Biometric Setup');
+    } finally {
+      setTesting(false);
     }
   };
 
   const handleSkip = async () => {
-    await BiometricService.setBiometricEnabled(false);
-    await BiometricService.setBiometricSetupCompleted(true);
-    
-    Alert.alert(
-      'Biometric Authentication Skipped',
-      'You can enable biometric authentication later in your profile settings.',
-      [
-        {
-          text: 'Continue',
-          onPress: onSetupComplete,
-        },
-      ]
-    );
+    try {
+      await BiometricService.setBiometricEnabled(false);
+      await BiometricService.setBiometricSetupCompleted(true);
+      
+      Alert.alert(
+        'Biometric Authentication Skipped',
+        'You can enable biometric authentication later in your profile settings.',
+        [
+          {
+            text: 'Continue',
+            onPress: onSetupComplete,
+          },
+        ]
+      );
+    } catch (error) {
+      ErrorService.handleError(error, 'Biometric Setup');
+    }
   };
 
   const getBiometricIcon = () => {

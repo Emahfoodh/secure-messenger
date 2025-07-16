@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Link } from "expo-router";
 import { signUp } from "@/services/authService";
+import { ErrorService } from "@/services/errorService";
 
 export default function SignupScreen() {
   const [email, setEmail] = useState("");
@@ -55,13 +56,13 @@ export default function SignupScreen() {
     if (!validateInputs()) return;
 
     setLoading(true);
-    const result = await signUp(email, password, username);
-    setLoading(false);
-
-    if (!result.success) {
-      Alert.alert("Signup Failed", result.error || "An error occurred");
-    } else {
+    try {
+      const result = await signUp(email, password, username);
       Alert.alert("Success", "Account created successfully!");
+    } catch (error) {
+      ErrorService.handleError(error, 'Sign Up');
+    } finally {
+      setLoading(false);
     }
   };
 

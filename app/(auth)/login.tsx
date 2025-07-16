@@ -1,4 +1,5 @@
 import { signIn } from '@/services/authService';
+import { ErrorService } from '@/services/errorService';
 import { Link } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -24,11 +25,13 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
-    const result = await signIn(email, password);
-    setLoading(false);
-
-    if (!result.success) {
-      Alert.alert("Login Failed", result.error || "An error occurred");
+    try {
+      const result = await signIn(email, password);
+      // Handle successful login here if needed
+    } catch (error) {
+      ErrorService.handleError(error, 'Sign In');
+    } finally {
+      setLoading(false);
     }
   };
 

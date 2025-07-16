@@ -1,5 +1,6 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppError, ErrorType } from '@/services/errorService';
 
 export interface BiometricCapabilities {
   hasHardware: boolean;
@@ -9,7 +10,6 @@ export interface BiometricCapabilities {
 
 export interface BiometricResult {
   success: boolean;
-  error?: string;
   biometricType?: string;
 }
 
@@ -32,12 +32,11 @@ export class BiometricService {
         availableTypes,
       };
     } catch (error) {
-      console.error('Error checking biometric capabilities:', error);
-      return {
-        hasHardware: false,
-        isEnrolled: false,
-        availableTypes: [],
-      };
+      throw new AppError(
+        ErrorType.BIOMETRIC,
+        'Unable to check biometric capabilities',
+        error
+      );
     }
   }
 
@@ -77,17 +76,17 @@ export class BiometricService {
       const capabilities = await this.checkBiometricCapabilities();
       
       if (!capabilities.hasHardware) {
-        return {
-          success: false,
-          error: 'Biometric hardware not available on this device',
-        };
+        throw new AppError(
+          ErrorType.BIOMETRIC,
+          'Biometric hardware not available on this device'
+        );
       }
 
       if (!capabilities.isEnrolled) {
-        return {
-          success: false,
-          error: 'No biometric credentials enrolled. Please set up biometrics in your device settings.',
-        };
+        throw new AppError(
+          ErrorType.BIOMETRIC,
+          'No biometric credentials enrolled. Please set up biometrics in your device settings'
+        );
       }
 
       const result = await LocalAuthentication.authenticateAsync({
@@ -121,10 +120,10 @@ export class BiometricService {
               errorMessage = 'No biometric credentials enrolled';
               break;
             case 'lockout':
-              errorMessage = 'Too many failed attempts. Try again later.';
+              errorMessage = 'Too many failed attempts. Try again later';
               break;
             case 'authentication_failed':
-              errorMessage = 'Authentication failed. Please try again.';
+              errorMessage = 'Authentication failed. Please try again';
               break;
             case 'user_fallback':
               errorMessage = 'User selected fallback authentication';
@@ -134,17 +133,22 @@ export class BiometricService {
           }
         }
 
-        return {
-          success: false,
-          error: errorMessage,
-        };
+        throw new AppError(
+          ErrorType.BIOMETRIC,
+          errorMessage,
+          result
+        );
       }
     } catch (error) {
-      console.error('Biometric authentication error:', error);
-      return {
-        success: false,
-        error: 'An unexpected error occurred during authentication',
-      };
+      if (error instanceof AppError) {
+        throw error;
+      }
+      
+      throw new AppError(
+        ErrorType.BIOMETRIC,
+        'An unexpected error occurred during authentication',
+        error
+      );
     }
   }
 
@@ -156,8 +160,11 @@ export class BiometricService {
       const enabled = await AsyncStorage.getItem(this.BIOMETRIC_ENABLED_KEY);
       return enabled === 'true';
     } catch (error) {
-      console.error('Error checking biometric enabled status:', error);
-      return false;
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Unable to check biometric settings',
+        error
+      );
     }
   }
 
@@ -168,7 +175,11 @@ export class BiometricService {
     try {
       await AsyncStorage.setItem(this.BIOMETRIC_ENABLED_KEY, enabled.toString());
     } catch (error) {
-      console.error('Error setting biometric enabled status:', error);
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Unable to save biometric settings',
+        error
+      );
     }
   }
 
@@ -180,8 +191,11 @@ export class BiometricService {
       const completed = await AsyncStorage.getItem(this.BIOMETRIC_SETUP_COMPLETED_KEY);
       return completed === 'true';
     } catch (error) {
-      console.error('Error checking biometric setup status:', error);
-      return false;
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Unable to check biometric setup status',
+        error
+      );
     }
   }
 
@@ -192,7 +206,11 @@ export class BiometricService {
     try {
       await AsyncStorage.setItem(this.BIOMETRIC_SETUP_COMPLETED_KEY, completed.toString());
     } catch (error) {
-      console.error('Error setting biometric setup status:', error);
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Unable to save biometric setup status',
+        error
+      );
     }
   }
 
@@ -200,21 +218,25 @@ export class BiometricService {
    * Get a user-friendly description of available biometric methods
    */
   static async getBiometricDescription(): Promise<string> {
-    const capabilities = await this.checkBiometricCapabilities();
-    
-    if (!capabilities.hasHardware) {
-      return 'Biometric authentication not available on this device';
-    }
+    try {
+      const capabilities = await this.checkBiometricCapabilities();
+      
+      if (!capabilities.hasHardware) {
+        return 'Biometric authentication not available on this device';
+      }
 
-    if (!capabilities.isEnrolled) {
-      return 'No biometric credentials enrolled. Please set up biometrics in your device settings.';
-    }
+      if (!capabilities.isEnrolled) {
+        return 'No biometric credentials enrolled. Please set up biometrics in your device settings.';
+      }
 
-    const types = this.getBiometricTypeNames(capabilities.availableTypes);
-    if (types.length === 0) {
-      return 'Biometric authentication available';
-    }
+      const types = this.getBiometricTypeNames(capabilities.availableTypes);
+      if (types.length === 0) {
+        return 'Biometric authentication available';
+      }
 
-    return `${types.join(' and ')} available`;
+      return `${types.join(' and ')} available`;
+    } catch (error) {
+      return 'Unable to check biometric capabilities';
+    }
   }
 }
