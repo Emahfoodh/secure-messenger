@@ -39,6 +39,33 @@ export class MessageService {
   private static PAGINATION_LIMIT = 20;
 
   /**
+   * Helper method to safely convert Firestore timestamps to ISO strings
+   */
+  private static convertTimestamp(timestamp: any): string {
+    if (!timestamp) {
+      return new Date().toISOString();
+    }
+    
+    // Check if it's a Firestore Timestamp object
+    if (timestamp && typeof timestamp === 'object' && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate().toISOString();
+    }
+    
+    // If it's already a string, return it
+    if (typeof timestamp === 'string') {
+      return timestamp;
+    }
+    
+    // If it's a Date object
+    if (timestamp instanceof Date) {
+      return timestamp.toISOString();
+    }
+    
+    // Fallback to current date
+    return new Date().toISOString();
+  }
+
+  /**
    * Send a new message to a chat (supports text and images)
    */
   static async sendMessage(
@@ -193,10 +220,8 @@ export class MessageService {
           return {
             id: doc.id,
             ...data,
-            // Convert Firestore timestamp to ISO string
-            timestamp: data.timestamp instanceof Timestamp 
-              ? data.timestamp.toDate().toISOString()
-              : data.timestamp,
+            // Convert Firestore timestamp to ISO string safely
+            timestamp: this.convertTimestamp(data.timestamp),
           } as Message;
         }).reverse(); // Reverse to show oldest first
 
@@ -270,9 +295,7 @@ export class MessageService {
         return {
           id: doc.id,
           ...data,
-          timestamp: data.timestamp instanceof Timestamp 
-            ? data.timestamp.toDate().toISOString()
-            : data.timestamp,
+          timestamp: this.convertTimestamp(data.timestamp),
         } as Message;
       }).reverse(); // Reverse to show oldest first
 

@@ -1,4 +1,4 @@
-// app/chat/[id].tsx 
+// app/chat/[id].tsx
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
@@ -191,19 +191,20 @@ export default function ChatScreen() {
         type: 'text',
       });
 
-      await ChatService.updateLastMessage(chatId, user.uid, senderUsername, messageContent);
-
-      if (chat) {
-        const otherParticipants = chat.participants.filter(p => p !== user.uid);
-        await Promise.all(
-          otherParticipants.map(participantId => 
+      // Update last message and unread counts
+      await Promise.all([
+        ChatService.updateLastMessage(chatId, user.uid, senderUsername, messageContent),
+        chat ? Promise.all(
+          chat.participants.filter(p => p !== user.uid).map(participantId => 
             ChatService.incrementUnreadCount(chatId, participantId)
           )
-        );
-      }
+        ) : Promise.resolve()
+      ]);
+
     } catch (error) {
       ErrorService.handleError(error, 'Send Message');
       setInputText(messageContent);
+
     } finally {
       setSending(false);
     }
@@ -227,19 +228,55 @@ export default function ChatScreen() {
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
-      await MessageService.sendImageMessage(chatId, user.uid, image.uri);
-      await ChatService.updateLastMessage(chatId, user.uid, senderUsername, '📷 Photo', 'image');
+      // Create optimistic image message
+      const optimisticMessage: Message = {
+        id: `temp_img_${Date.now()}`,
+        chatId,
+        senderId: user.uid,
+        senderUsername,
+        senderDisplayName: currentUserProfile?.displayName,
+        senderProfilePicture: currentUserProfile?.profilePicture,
+        content: '',
+        type: 'image',
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+        imageData: {
+          uri: image.uri,
+          downloadURL: '', // Will be updated when actual message comes through
+          width: image.width || 0,
+          height: image.height || 0,
+          size: 0,
+        },
+      };
 
-      if (chat) {
-        const otherParticipants = chat.participants.filter(p => p !== user.uid);
-        await Promise.all(
-          otherParticipants.map(participantId => 
+      // Add optimistic message immediately
+      setAllMessages(prevMessages => [optimisticMessage, ...prevMessages]);
+
+      // Send actual image message
+      await MessageService.sendImageMessage(chatId, user.uid, image.uri);
+
+      // Remove optimistic message (real one will come through listener)
+      setAllMessages(prevMessages => 
+        prevMessages.filter(msg => msg.id !== optimisticMessage.id)
+      );
+
+      // Update last message and unread counts
+      await Promise.all([
+        ChatService.updateLastMessage(chatId, user.uid, senderUsername, '📷 Photo', 'image'),
+        chat ? Promise.all(
+          chat.participants.filter(p => p !== user.uid).map(participantId => 
             ChatService.incrementUnreadCount(chatId, participantId)
           )
-        );
-      }
+        ) : Promise.resolve()
+      ]);
+
     } catch (error) {
       ErrorService.handleError(error, 'Send Image');
+      
+      // Remove optimistic message on error
+      setAllMessages(prevMessages => 
+        prevMessages.filter(msg => msg.id !== `temp_img_${Date.now()}`)
+      );
     } finally {
       setSendingImage(false);
     }
