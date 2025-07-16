@@ -1,3 +1,5 @@
+// app/(tabs)/contacts.tsx - Updated ContactItem component
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -10,7 +12,10 @@ import {
   Modal,
 } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'expo-router';
 import { getContacts, removeContact, Contact } from '@/services/contactService';
+import { ChatService } from '@/services/chatService';
+import { getUserProfile } from '@/services/userService';
 import { ErrorService } from '@/services/errorService';
 import UserSearchScreen from '@/screens/contact/UserSearchScreen';
 import QRScannerScreen from '@/screens/contact/QRScannerScreen';
@@ -21,9 +26,10 @@ type TabType = 'contacts' | 'requests' | 'search' | 'scan';
 interface ContactItemProps {
   contact: Contact;
   onRemove: (contact: Contact) => void;
+  onStartChat: (contact: Contact) => void;
 }
 
-const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove }) => {
+const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartChat }) => {
   const handleRemove = () => {
     Alert.alert(
       'Remove Contact',
@@ -51,22 +57,33 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove }) => {
         </View>
       </View>
       
-      <TouchableOpacity
-        style={styles.removeButton}
-        onPress={handleRemove}
-      >
-        <Text style={styles.removeButtonText}>Remove</Text>
-      </TouchableOpacity>
+      <View style={styles.contactActions}>
+        <TouchableOpacity
+          style={styles.chatButton}
+          onPress={() => onStartChat(contact)}
+        >
+          <Text style={styles.chatButtonText}>Chat</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={handleRemove}
+        >
+          <Text style={styles.removeButtonText}>Remove</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
 
 export default function ContactsScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('contacts');
   const [scannerVisible, setScannerVisible] = useState(false);
+  const [creatingChat, setCreatingChat] = useState(false);
 
   useEffect(() => {
     loadContacts();
@@ -98,6 +115,30 @@ export default function ContactsScreen() {
     }
   };
 
+  const handleStartChat = async (contact: Contact) => {
+    if (!user || creatingChat) return;
+
+    setCreatingChat(true);
+    try {
+      // Get current user profile
+      const currentUserProfile = await getUserProfile(user.uid);
+      if (!currentUserProfile) {
+        Alert.alert('Error', 'Could not load your profile');
+        return;
+      }
+
+      // Create or get existing chat
+      const chatId = await ChatService.createChat(currentUserProfile, contact);
+      
+      // Navigate to chat
+      router.push(`/chat/${chatId}`);
+    } catch (error) {
+      ErrorService.handleError(error, 'Start Chat');
+    } finally {
+      setCreatingChat(false);
+    }
+  };
+
   const handleQRScan = () => {
     setScannerVisible(true);
   };
@@ -112,6 +153,7 @@ export default function ContactsScreen() {
     <ContactItem
       contact={item}
       onRemove={handleRemoveContact}
+      onStartChat={handleStartChat}
     />
   );
 
@@ -217,11 +259,16 @@ export default function ContactsScreen() {
           onScanComplete={handleQRScanComplete}
         />
       </Modal>
+
+      {creatingChat && (
+        <View style={styles.loadingOverlay}>
+          <Text style={styles.loadingOverlayText}>Starting chat...</Text>
+        </View>
+      )}
     </View>
   );
 }
 
-// Keep the same styles as before, just add the new tab styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -242,7 +289,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#007AFF',
   },
   tabText: {
-    fontSize: 14, // Smaller text due to more tabs
+    fontSize: 14,
     color: '#666',
   },
   activeTabText: {
@@ -317,6 +364,21 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
   },
+  contactActions: {
+    flexDirection: 'row',
+  },
+  chatButton: {
+    backgroundColor: '#34C759',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  chatButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   removeButton: {
     backgroundColor: '#ff3b30',
     paddingHorizontal: 12,
@@ -352,6 +414,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   scanButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingOverlayText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
