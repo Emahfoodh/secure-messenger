@@ -53,7 +53,7 @@ export default function ChatScreen() {
   // Load initial messages and set up real-time listener
   useEffect(() => {
     if (!chatId || !user) return;
-
+    
     loadChatDetails();
     checkContactStatus();
 
@@ -62,8 +62,8 @@ export default function ChatScreen() {
       chatId,
       user.uid,
       (recentMessages) => {
+        
         setAllMessages(prevMessages => {
-          // Merge recent messages with older loaded messages
           const messageIds = new Set(recentMessages.map(m => m.id));
           const olderMessages = prevMessages.filter(m => !messageIds.has(m.id));
           
@@ -74,6 +74,7 @@ export default function ChatScreen() {
           
           return allSorted;
         });
+        
         setLoading(false);
         
         // Mark chat as read when messages are loaded
@@ -86,7 +87,7 @@ export default function ChatScreen() {
     return unsubscribe;
   }, [chatId, user]);
 
-  // Update displayed messages when allMessages changes
+  // Update displayed messages when allMessages changes - FIXED
   useEffect(() => {
     setMessages(allMessages);
   }, [allMessages]);
@@ -284,6 +285,7 @@ export default function ChatScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
         <Text>Loading chat...</Text>
       </View>
     );
@@ -425,7 +427,8 @@ export default function ChatScreen() {
       {/* Sending Image Overlay */}
       {sendingImage && (
         <View style={styles.sendingImageOverlay}>
-          <Text style={styles.sendingImageText}>Sending image...</Text>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.sendingImageText}>Processing and sending image...</Text>
         </View>
       )}
     </KeyboardAvoidingView>
@@ -610,7 +613,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -618,9 +621,7 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    marginTop: 10,
+    textAlign: 'center',
   },
 });

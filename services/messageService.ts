@@ -100,10 +100,8 @@ export class MessageService {
         ...message,
         timestamp: serverTimestamp(), // Use server timestamp for consistency
       });
-
       // Update message status to sent
       await updateDoc(docRef, { status: 'sent' });
-      
       return docRef.id;
     } catch (error) {
       throw new AppError(
@@ -115,7 +113,7 @@ export class MessageService {
   }
 
   /**
-   * Send an image message with processing
+   * Send an image message with processing - IMPROVED VERSION
    */
   static async sendImageMessage(
     chatId: string,
@@ -130,29 +128,9 @@ export class MessageService {
         throw new AppError(ErrorType.VALIDATION, 'Sender profile not found');
       }
 
-      // Create initial message with 'sending' status
-      const initialMessage: Omit<Message, 'id'> = {
-        chatId,
-        senderId,
-        senderUsername: senderProfile.username,
-        ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
-        ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
-        content: caption,
-        type: 'image',
-        timestamp: new Date().toISOString(),
-        status: 'sending',
-      };
-
-      // Add initial message to Firestore using addDoc
-      const messagesRef = collection(db, 'chats', chatId, 'messages');
-      const docRef = await addDoc(messagesRef, {
-        ...initialMessage,
-        timestamp: serverTimestamp(),
-      });
-
-      const messageId = docRef.id;
-
-      // Process image in background
+      // STEP 1: Process image first (compress and upload)
+      const messageId = ImageService.generateImageMessageId();
+      
       try {
         const processedImage = await ImageService.processImageForChat(
           imageUri,
@@ -160,8 +138,17 @@ export class MessageService {
           messageId
         );
 
-        // Update message with image data and change status to sent
-        await updateDoc(docRef, {
+        // STEP 2: Create complete message with image data
+        const message: Omit<Message, 'id'> = {
+          chatId,
+          senderId,
+          senderUsername: senderProfile.username,
+          ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
+          ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
+          content: caption,
+          type: 'image',
+          timestamp: new Date().toISOString(),
+          status: 'sent', // FIXED: Set as 'sent' after successful processing
           imageData: {
             uri: processedImage.localUri,
             downloadURL: processedImage.downloadURL,
@@ -169,16 +156,34 @@ export class MessageService {
             height: processedImage.height,
             size: processedImage.size,
           },
-          status: 'sent',
+        };
+
+        // STEP 3: Add complete message to Firestore
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const docRef = await setDoc(doc(messagesRef, messageId), {
+          ...message,
+          timestamp: serverTimestamp(),
         });
 
         return messageId;
       } catch (imageError) {
-        // If image processing fails, update message status to indicate error
-        await updateDoc(docRef, {
-          status: 'sent', // Keep as sent but without image
-          content: caption || 'Failed to upload image',
+        // If image processing fails, create a text message instead
+        const failureMessage: Omit<Message, 'id'> = {
+          chatId,
+          senderId,
+          senderUsername: senderProfile.username,
+          ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
+          ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
+          content: 'Failed to upload image',
           type: 'text',
+          timestamp: new Date().toISOString(),
+          status: 'sent',
+        };
+
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const docRef = await addDoc(messagesRef, {
+          ...failureMessage,
+          timestamp: serverTimestamp(),
         });
         
         throw new AppError(
@@ -197,7 +202,7 @@ export class MessageService {
   }
 
   /**
-   * Listen to recent messages in a chat (real-time) with automatic read marking
+   * Listen to recent messages in a chat (real-time) - IMPROVED VERSION
    * Only loads the most recent messages for real-time updates
    */
   static listenToRecentMessages(
@@ -215,14 +220,19 @@ export class MessageService {
       );
 
       const unsubscribe = onSnapshot(q, async (snapshot) => {
+        console.log('📱 Real-time update received:', snapshot.docs.length, 'messages');
+        
         const messages: Message[] = snapshot.docs.map(doc => {
           const data = doc.data();
-          return {
+          const message = {
             id: doc.id,
             ...data,
             // Convert Firestore timestamp to ISO string safely
             timestamp: this.convertTimestamp(data.timestamp),
           } as Message;
+          
+          console.log('📄 Message:', message.id, message.type, message.content?.substring(0, 20));
+          return message;
         }).reverse(); // Reverse to show oldest first
 
         // Mark unread messages as read (except our own messages)
@@ -241,9 +251,10 @@ export class MessageService {
           status: this.calculateMessageStatus(msg, currentUserId)
         }));
 
+        console.log('🔄 Calling callback with', updatedMessages.length, 'messages');
         callback(updatedMessages);
       }, (error) => {
-        console.error('Error listening to messages:', error);
+        console.error('❌ Error listening to messages:', error);
         throw new AppError(
           ErrorType.STORAGE,
           'Failed to load messages',

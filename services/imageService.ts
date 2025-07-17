@@ -69,7 +69,7 @@ export class ImageService {
   }
 
   /**
-   * Pick image from camera
+   * Pick image from camer
    */
   static async pickImageFromCamera(options: ImagePickerOptions = {}): Promise<ImagePicker.ImagePickerAsset | null> {
     try {
@@ -83,7 +83,7 @@ export class ImageService {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'], // Updated: Use array instead of MediaTypeOptions
+        mediaTypes: ['images'], // FIXED: Use array instead of MediaTypeOptions.Images
         allowsEditing: false,
         aspect: options.aspect ?? [4, 3],
         quality: options.quality ?? 1,
@@ -121,7 +121,7 @@ export class ImageService {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], // Updated: Use array instead of MediaTypeOptions
+        mediaTypes: ['images'], // FIXED: Use array instead of MediaTypeOptions.Images
         allowsEditing: false,
         aspect: options.aspect ?? [4, 3],
         quality: options.quality ?? 1,
@@ -181,7 +181,7 @@ export class ImageService {
         newHeight = Math.round(originalHeight * ratio);
       }
 
-      // Resize and compress the image using the legacy API (still supported)
+      // Resize and compress the image
       const result = await ImageManipulator.manipulateAsync(
         imageUri,
         [{ resize: { width: newWidth, height: newHeight } }],
