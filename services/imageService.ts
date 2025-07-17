@@ -84,7 +84,7 @@ export class ImageService {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'], // Updated: Use array instead of MediaTypeOptions
-        allowsEditing: options.allowsEditing ?? true,
+        allowsEditing: false,
         aspect: options.aspect ?? [4, 3],
         quality: options.quality ?? 1,
       });
@@ -122,7 +122,7 @@ export class ImageService {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'], // Updated: Use array instead of MediaTypeOptions
-        allowsEditing: options.allowsEditing ?? true,
+        allowsEditing: false,
         aspect: options.aspect ?? [4, 3],
         quality: options.quality ?? 1,
         allowsMultipleSelection: options.allowsMultipleSelection ?? false,
