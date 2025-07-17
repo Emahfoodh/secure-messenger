@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { Message } from '@/types/messageTypes';
 import ImageMessage from '@/components/media/ImageMessage';
+import VideoMessage from '@/components/media/VideoMessage';
 
 interface MessageItemProps {
   message: Message;
@@ -54,6 +55,53 @@ const MessageItem: React.FC<MessageItemProps> = memo(({ message, isOwnMessage, s
         return 'rgba(255,255,255,0.7)';
     }
   };
+
+  // Handle video messages
+  if (message.type === 'video' && message.videoData) {
+    return (
+      <View style={[
+        styles.messageContainer,
+        isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
+      ]}>
+        {!isOwnMessage && showSender && message.senderProfilePicture && (
+          <Image 
+            source={{ uri: message.senderProfilePicture }} 
+            style={styles.senderAvatar} 
+          />
+        )}
+        
+        <View style={styles.videoMessageWrapper}>
+          {!isOwnMessage && showSender && (
+            <Text style={styles.senderName}>
+              {message.senderDisplayName || message.senderUsername}
+            </Text>
+          )}
+          
+          <VideoMessage
+            videoData={message.videoData}
+            isOwnMessage={isOwnMessage}
+            timestamp={message.timestamp}
+            status={message.status}
+          />
+          
+          {/* Show caption if exists */}
+          {message.content && (
+            <View style={[
+              styles.captionBubble,
+              isOwnMessage ? styles.ownCaptionBubble : styles.otherCaptionBubble
+            ]}>
+              <Text style={[
+                styles.captionText,
+                isOwnMessage ? styles.ownCaptionText : styles.otherCaptionText
+              ]}>
+                {message.content}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
 
   // Handle image messages
   if (message.type === 'image' && message.imageData) {
@@ -244,8 +292,11 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontWeight: 'bold',
   },
-  // Image message specific styles
+  // Image/Video message specific styles
   imageMessageWrapper: {
+    maxWidth: '75%',
+  },
+  videoMessageWrapper: {
     maxWidth: '75%',
   },
   captionBubble: {

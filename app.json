@@ -12,7 +12,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSFaceIDUsageDescription": "This app uses Face ID for secure authentication to protect your messages and personal data.",
-        "NSCameraUsageDescription": "This app uses the camera to scan QR codes for adding contacts and to capture photos/videos for messaging."
+        "NSCameraUsageDescription": "This app uses the camera to scan QR codes for adding contacts and to capture photos/videos for messaging.",
+        "NSMicrophoneUsageDescription": "This app uses the microphone to record audio and video messages."
       }
     },
     "android": {
@@ -25,6 +26,7 @@
         "USE_BIOMETRIC",
         "USE_FINGERPRINT",
         "CAMERA",
+        "RECORD_AUDIO",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE"
       ]
@@ -62,6 +64,13 @@
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to access your photos to upload profile pictures and share images in messages.",
           "cameraPermission": "Allow $(PRODUCT_NAME) to access camera to capture photos for messages and profile pictures."
+        }
+      ],
+      [
+        "expo-video",
+        {
+          "supportsBackgroundPlayback": false,
+          "supportsPictureInPicture": true
         }
       ]
     ],

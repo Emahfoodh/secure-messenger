@@ -1,5 +1,4 @@
 // app/chat/[id].tsx
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -24,6 +23,7 @@ import { Message, Chat } from '@/types/messageTypes';
 import { ErrorService } from '@/services/errorService';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import ImagePickerModal from '@/components/media/ImagePickerModal';
+import VideoPickerModal from '@/components/media/VideoPickerModal';
 import MessageItem from '@/components/chat/MessageItem';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -40,7 +40,9 @@ export default function ChatScreen() {
   const [isContactValid, setIsContactValid] = useState(true);
   const [checkingContact, setCheckingContact] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
+  const [sendingVideo, setSendingVideo] = useState(false);
   
   // Pagination states
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -249,6 +251,45 @@ export default function ChatScreen() {
     }
   };
 
+  // NEW: Handle video selection
+  const handleVideoSelected = async (video: ImagePicker.ImagePickerAsset) => {
+    if (!user || !chatId || sendingVideo) return;
+
+    if (!isContactValid) {
+      Alert.alert(
+        'Cannot Send Video',
+        'You can only send videos to your contacts. This person is no longer in your contacts list.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    setSendingVideo(true);
+    
+    try {
+      const currentUserProfile = await getUserProfile(user.uid);
+      const senderUsername = currentUserProfile?.username || user.email || 'User';
+
+      // Send actual video message
+      await MessageService.sendVideoMessage(chatId, user.uid, video);
+
+      // Update last message and unread counts
+      await Promise.all([
+        ChatService.updateLastMessage(chatId, user.uid, senderUsername, '🎥 Video', 'video'),
+        chat ? Promise.all(
+          chat.participants.filter(p => p !== user.uid).map(participantId => 
+            ChatService.incrementUnreadCount(chatId, participantId)
+          )
+        ) : Promise.resolve()
+      ]);
+
+    } catch (error) {
+      ErrorService.handleError(error, 'Send Video');
+    } finally {
+      setSendingVideo(false);
+    }
+  };
+
   // Optimized render function with keyExtractor (adjusted for inverted list)
   const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isOwnMessage = item.senderId === user?.uid;
@@ -377,12 +418,22 @@ export default function ChatScreen() {
       {isContactValid ? (
         <View style={styles.inputContainer}>
           <TouchableOpacity
-            style={styles.imageButton}
+            style={styles.mediaButton}
             onPress={() => setShowImagePicker(true)}
-            disabled={sendingImage}
+            disabled={sendingImage || sendingVideo}
           >
-            <Text style={styles.imageButtonText}>
+            <Text style={styles.mediaButtonText}>
               {sendingImage ? '⏳' : '📷'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.mediaButton}
+            onPress={() => setShowVideoPicker(true)}
+            disabled={sendingImage || sendingVideo}
+          >
+            <Text style={styles.mediaButtonText}>
+              {sendingVideo ? '⏳' : '🎥'}
             </Text>
           </TouchableOpacity>
 
@@ -424,11 +475,20 @@ export default function ChatScreen() {
         onImageSelected={handleImageSelected}
       />
 
-      {/* Sending Image Overlay */}
-      {sendingImage && (
-        <View style={styles.sendingImageOverlay}>
+      {/* Video Picker Modal */}
+      <VideoPickerModal
+        visible={showVideoPicker}
+        onClose={() => setShowVideoPicker(false)}
+        onVideoSelected={handleVideoSelected}
+      />
+
+      {/* Sending Media Overlay */}
+      {(sendingImage || sendingVideo) && (
+        <View style={styles.sendingMediaOverlay}>
           <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.sendingImageText}>Processing and sending image...</Text>
+          <Text style={styles.sendingMediaText}>
+            {sendingImage ? 'Processing and sending image...' : 'Processing and sending video...'}
+          </Text>
         </View>
       )}
     </KeyboardAvoidingView>
@@ -529,17 +589,17 @@ const styles = StyleSheet.create({
     borderTopColor: '#eee',
     backgroundColor: '#fff',
   },
-  imageButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  mediaButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 8,
   },
-  imageButtonText: {
-    fontSize: 18,
+  mediaButtonText: {
+    fontSize: 16,
     color: '#fff',
   },
   textInput: {
@@ -607,7 +667,7 @@ const styles = StyleSheet.create({
     color: '#666',
     fontStyle: 'italic',
   },
-  sendingImageOverlay: {
+  sendingMediaOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
@@ -617,7 +677,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendingImageText: {
+  sendingMediaText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

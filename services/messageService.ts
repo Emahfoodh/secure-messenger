@@ -25,7 +25,9 @@ import { Message, SendMessageData } from '@/types/messageTypes';
 import { AppError, ErrorType } from '@/services/errorService';
 import { getUserProfile } from '@/services/userService';
 import { ImageService } from '@/services/imageService';
+import { VideoService } from '@/services/videoService';
 import { arrayUnion as firestoreArrayUnion } from 'firebase/firestore';
+import * as ImagePicker from 'expo-image-picker';
 
 export interface MessagesPaginationResult {
   messages: Message[];
@@ -66,7 +68,7 @@ export class MessageService {
   }
 
   /**
-   * Send a new message to a chat (supports text and images)
+   * Send a new message to a chat (supports text, images, and videos)
    */
   static async sendMessage(
     chatId: string, 
@@ -91,6 +93,7 @@ export class MessageService {
         timestamp: new Date().toISOString(),
         status: 'sending',
         ...(messageData.imageData && { imageData: messageData.imageData }),
+        ...(messageData.videoData && { videoData: messageData.videoData }),
         ...(messageData.replyTo && { replyTo: messageData.replyTo }),
       };
 
@@ -196,6 +199,96 @@ export class MessageService {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to send image message',
+        error
+      );
+    }
+  }
+
+  /**
+   * Send a video message with processing - NEW METHOD
+   */
+  static async sendVideoMessage(
+    chatId: string,
+    senderId: string,
+    video: ImagePicker.ImagePickerAsset,
+    caption: string = ''
+  ): Promise<string> {
+    try {
+      // Get sender profile
+      const senderProfile = await getUserProfile(senderId);
+      if (!senderProfile) {
+        throw new AppError(ErrorType.VALIDATION, 'Sender profile not found');
+      }
+
+      // STEP 1: Process video first (validate and upload)
+      const messageId = VideoService.generateVideoMessageId();
+      
+      try {
+        const processedVideo = await VideoService.processVideoForChat(
+          video,
+          chatId,
+          messageId
+        );
+
+        // STEP 2: Create complete message with video data
+        const message: Omit<Message, 'id'> = {
+          chatId,
+          senderId,
+          senderUsername: senderProfile.username,
+          ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
+          ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
+          content: caption,
+          type: 'video',
+          timestamp: new Date().toISOString(),
+          status: 'sent', // Set as 'sent' after successful processing
+          videoData: {
+            uri: processedVideo.localUri,
+            downloadURL: processedVideo.downloadURL,
+            duration: processedVideo.duration,
+            width: processedVideo.width,
+            height: processedVideo.height,
+            size: processedVideo.size,
+          },
+        };
+
+        // STEP 3: Add complete message to Firestore
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        await setDoc(doc(messagesRef, messageId), {
+          ...message,
+          timestamp: serverTimestamp(),
+        });
+
+        return messageId;
+      } catch (videoError) {
+        // If video processing fails, create a text message instead
+        const failureMessage: Omit<Message, 'id'> = {
+          chatId,
+          senderId,
+          senderUsername: senderProfile.username,
+          ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
+          ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
+          content: 'Failed to upload video',
+          type: 'text',
+          timestamp: new Date().toISOString(),
+          status: 'sent',
+        };
+
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        await addDoc(messagesRef, {
+          ...failureMessage,
+          timestamp: serverTimestamp(),
+        });
+        
+        throw new AppError(
+          ErrorType.STORAGE,
+          'Failed to process video',
+          videoError
+        );
+      }
+    } catch (error) {
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Failed to send video message',
         error
       );
     }
@@ -375,8 +468,9 @@ export class MessageService {
         content: 'This message was deleted',
         type: 'deleted',
         editedAt: new Date().toISOString(),
-        // Remove image data if it exists
+        // Remove media data if it exists
         imageData: null,
+        videoData: null,
       });
     } catch (error) {
       throw new AppError(

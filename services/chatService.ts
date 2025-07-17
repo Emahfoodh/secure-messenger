@@ -231,14 +231,14 @@ export class ChatService {
   }
 
   /**
-   * Update last message in chat - IMPROVED VERSION
+   * Update last message in chat - IMPROVED VERSION WITH VIDEO SUPPORT
    */
   static async updateLastMessage(
     chatId: string,
     senderId: string,
     senderUsername: string,
     content: string,
-    type: 'text' | 'image' | 'file' = 'text'
+    type: 'text' | 'image' | 'video' | 'file' = 'text'
   ): Promise<void> {
     try {
       // Use a batch to ensure atomicity
