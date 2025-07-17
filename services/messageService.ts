@@ -220,7 +220,6 @@ export class MessageService {
       );
 
       const unsubscribe = onSnapshot(q, async (snapshot) => {
-        console.log('📱 Real-time update received:', snapshot.docs.length, 'messages');
         
         const messages: Message[] = snapshot.docs.map(doc => {
           const data = doc.data();
@@ -231,7 +230,6 @@ export class MessageService {
             timestamp: this.convertTimestamp(data.timestamp),
           } as Message;
           
-          console.log('📄 Message:', message.id, message.type, message.content?.substring(0, 20));
           return message;
         }).reverse(); // Reverse to show oldest first
 
@@ -251,7 +249,6 @@ export class MessageService {
           status: this.calculateMessageStatus(msg, currentUserId)
         }));
 
-        console.log('🔄 Calling callback with', updatedMessages.length, 'messages');
         callback(updatedMessages);
       }, (error) => {
         console.error('❌ Error listening to messages:', error);
