@@ -14,11 +14,10 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'expo-router';
 import { ChatService } from '@/services/chatService';
 import { ChatListItem } from '@/types/messageTypes';
-import { ErrorService } from '@/services/errorService';
 
 interface ChatItemProps {
   item: ChatListItem;
-  onPress: (chatId: string) => void;
+  onPress: (item: ChatListItem) => void;
 }
 
 const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
@@ -82,7 +81,7 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
   return (
     <TouchableOpacity
       style={styles.chatItem}
-      onPress={() => onPress(item.chat.id)}
+      onPress={() => onPress(item)}
       activeOpacity={0.7}
     >
       <View style={styles.avatarContainer}>
@@ -175,8 +174,9 @@ export default function ChatsScreen() {
     return unsubscribe;
   }, [user]);
 
-  const handleChatPress = (chatId: string) => {
-    router.push(`/chat/${chatId}`);
+  const handleChatPress = (item: ChatListItem) => {
+    item.unreadCount = 0;
+    router.push(`/chat/${item.chat.id}`);
   };
 
   const onRefresh = () => {
