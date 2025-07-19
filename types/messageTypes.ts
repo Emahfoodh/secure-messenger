@@ -31,6 +31,9 @@ export interface Message {
   status: 'sending' | 'sent' | 'read';
   readBy?: string[]; // Array of user IDs who have read this message
   editedAt?: string;
+  // 🔐 Encryption support
+  isEncrypted?: boolean; // Whether this message is encrypted
+  encryptedContent?: string; // The encrypted version of the content (stored in DB)
   // Media-specific data
   imageData?: ImageData;
   videoData?: VideoData;
@@ -44,6 +47,8 @@ export interface Message {
 export interface SendMessageData {
   content: string;
   type: 'text' | 'image' | 'video' | 'file';
+  // 🔐 Encryption flag
+  shouldEncrypt?: boolean; // Whether to encrypt this message
   // Media-specific data for sending
   imageData?: ImageData;
   videoData?: VideoData;
@@ -64,12 +69,16 @@ export interface Chat {
     senderUsername: string;
     timestamp: string;
     type: 'text' | 'image' | 'video' | 'file';
+    isEncrypted?: boolean; // 🔐 NEW: Whether last message is encrypted
   };
   lastActivity: string;
   createdAt: string;
   createdBy: string;
   unreadCount: { [userId: string]: number };
   isActive: boolean;
+  // 🔐 Encryption settings
+  isSecretChat?: boolean; // Whether this is a secret chat with encryption
+  encryptionEnabled?: boolean; // Whether encryption is enabled for this chat
 }
 
 export interface ChatParticipant {
@@ -95,5 +104,6 @@ export interface ChatListItem {
     senderUsername: string;
     timestamp: string;
     isOwnMessage: boolean;
+    isEncrypted?: boolean; 
   };
 }

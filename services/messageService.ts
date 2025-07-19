@@ -26,6 +26,8 @@ import { AppError, ErrorType } from '@/services/errorService';
 import { getUserProfile } from '@/services/userService';
 import { ImageService } from '@/services/imageService';
 import { VideoService } from '@/services/videoService';
+import { EncryptionService } from '@/services/encryptionService'; // 🔐 NEW
+import { ChatService } from '@/services/chatService'; // 🔐 NEW
 import { arrayUnion as firestoreArrayUnion } from 'firebase/firestore';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -68,7 +70,8 @@ export class MessageService {
   }
 
   /**
-   * Send a new message to a chat (supports text, images, and videos)
+   * Send a new message to a chat - UPDATED WITH ENCRYPTION SUPPORT
+   * 🔐 Now automatically encrypts messages in secret chats
    */
   static async sendMessage(
     chatId: string, 
@@ -82,16 +85,47 @@ export class MessageService {
         throw new AppError(ErrorType.VALIDATION, 'Sender profile not found');
       }
 
+      // 🔐 Check if this is a secret chat
+      const chat = await ChatService.getChatById(chatId);
+      const shouldEncrypt = chat?.isSecretChat || chat?.encryptionEnabled || messageData.shouldEncrypt;
+
+      let finalContent = messageData.content;
+      let encryptedContent: string | undefined;
+
+      // 🔐 Encrypt message if needed
+      if (shouldEncrypt && messageData.type === 'text' && messageData.content) {
+        try {
+          const chatKey = await EncryptionService.generateChatKey(
+            chat!.participants[0], 
+            chat!.participants[1]
+          );
+          encryptedContent = await EncryptionService.encryptMessage(messageData.content, chatKey);
+          // For storage, we keep the encrypted version
+          finalContent = encryptedContent;
+        } catch (error) {
+          console.error('Failed to encrypt message:', error);
+          if (error instanceof AppError) {
+            console.log('🔴 Encryption error:', error.type)
+            console.log('🔴 Encryption error message:', error.originalError);
+          }
+          // If encryption fails, send unencrypted (with warning in UI)
+          shouldEncrypt && console.warn('Message sent unencrypted due to encryption failure');
+        }
+      }
+
       const message: Omit<Message, 'id'> = {
         chatId,
         senderId,
         senderUsername: senderProfile.username,
         ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
         ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
-        content: messageData.content,
+        content: finalContent, // 🔐 May be encrypted
         type: messageData.type,
         timestamp: new Date().toISOString(),
         status: 'sending',
+        // 🔐 Encryption metadata
+        isEncrypted: !!shouldEncrypt && !!encryptedContent,
+        ...(encryptedContent && { encryptedContent }),
         ...(messageData.imageData && { imageData: messageData.imageData }),
         ...(messageData.videoData && { videoData: messageData.videoData }),
         ...(messageData.replyTo && { replyTo: messageData.replyTo }),
@@ -103,6 +137,7 @@ export class MessageService {
         ...message,
         timestamp: serverTimestamp(), // Use server timestamp for consistency
       });
+      
       // Update message status to sent
       await updateDoc(docRef, { status: 'sent' });
       return docRef.id;
@@ -116,7 +151,7 @@ export class MessageService {
   }
 
   /**
-   * Send an image message with processing - IMPROVED VERSION
+   * Send an image message with processing - UPDATED WITH ENCRYPTION
    */
   static async sendImageMessage(
     chatId: string,
@@ -131,6 +166,10 @@ export class MessageService {
         throw new AppError(ErrorType.VALIDATION, 'Sender profile not found');
       }
 
+      // 🔐 Check if this is a secret chat
+      const chat = await ChatService.getChatById(chatId);
+      const shouldEncrypt = chat?.isSecretChat || chat?.encryptionEnabled;
+
       // STEP 1: Process image first (compress and upload)
       const messageId = ImageService.generateImageMessageId();
       
@@ -141,6 +180,23 @@ export class MessageService {
           messageId
         );
 
+        // 🔐 Encrypt caption if needed
+        let finalCaption = caption;
+        let encryptedContent: string | undefined;
+        
+        if (shouldEncrypt && caption) {
+          try {
+            const chatKey = await EncryptionService.generateChatKey(
+              chat!.participants[0], 
+              chat!.participants[1]
+            );
+            encryptedContent = await EncryptionService.encryptMessage(caption, chatKey);
+            finalCaption = encryptedContent;
+          } catch (error) {
+            console.error('Failed to encrypt image caption:', error);
+          }
+        }
+
         // STEP 2: Create complete message with image data
         const message: Omit<Message, 'id'> = {
           chatId,
@@ -148,10 +204,13 @@ export class MessageService {
           senderUsername: senderProfile.username,
           ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
           ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
-          content: caption,
+          content: finalCaption, // 🔐 May be encrypted
           type: 'image',
           timestamp: new Date().toISOString(),
-          status: 'sent', // FIXED: Set as 'sent' after successful processing
+          status: 'sent',
+          // 🔐 Encryption metadata
+          isEncrypted: shouldEncrypt && !!encryptedContent,
+          ...(encryptedContent && { encryptedContent }),
           imageData: {
             uri: processedImage.localUri,
             downloadURL: processedImage.downloadURL,
@@ -163,7 +222,7 @@ export class MessageService {
 
         // STEP 3: Add complete message to Firestore
         const messagesRef = collection(db, 'chats', chatId, 'messages');
-        const docRef = await setDoc(doc(messagesRef, messageId), {
+        await setDoc(doc(messagesRef, messageId), {
           ...message,
           timestamp: serverTimestamp(),
         });
@@ -205,7 +264,7 @@ export class MessageService {
   }
 
   /**
-   * Send a video message with processing - NEW METHOD
+   * Send a video message with processing - UPDATED WITH ENCRYPTION
    */
   static async sendVideoMessage(
     chatId: string,
@@ -220,6 +279,10 @@ export class MessageService {
         throw new AppError(ErrorType.VALIDATION, 'Sender profile not found');
       }
 
+      // 🔐 Check if this is a secret chat
+      const chat = await ChatService.getChatById(chatId);
+      const shouldEncrypt = chat?.isSecretChat || chat?.encryptionEnabled;
+
       // STEP 1: Process video first (validate and upload)
       const messageId = VideoService.generateVideoMessageId();
       
@@ -230,6 +293,23 @@ export class MessageService {
           messageId
         );
 
+        // 🔐 Encrypt caption if needed
+        let finalCaption = caption;
+        let encryptedContent: string | undefined;
+        
+        if (shouldEncrypt && caption) {
+          try {
+            const chatKey = await EncryptionService.generateChatKey(
+              chat!.participants[0], 
+              chat!.participants[1]
+            );
+            encryptedContent = await EncryptionService.encryptMessage(caption, chatKey);
+            finalCaption = encryptedContent;
+          } catch (error) {
+            console.error('Failed to encrypt video caption:', error);
+          }
+        }
+
         // STEP 2: Create complete message with video data
         const message: Omit<Message, 'id'> = {
           chatId,
@@ -237,10 +317,13 @@ export class MessageService {
           senderUsername: senderProfile.username,
           ...(senderProfile.displayName && { senderDisplayName: senderProfile.displayName }),
           ...(senderProfile.profilePicture && { senderProfilePicture: senderProfile.profilePicture }),
-          content: caption,
+          content: finalCaption, // 🔐 May be encrypted
           type: 'video',
           timestamp: new Date().toISOString(),
-          status: 'sent', // Set as 'sent' after successful processing
+          status: 'sent',
+          // 🔐 Encryption metadata
+          isEncrypted: shouldEncrypt && !!encryptedContent,
+          ...(encryptedContent && { encryptedContent }),
           videoData: {
             uri: processedVideo.localUri,
             downloadURL: processedVideo.downloadURL,
@@ -295,8 +378,8 @@ export class MessageService {
   }
 
   /**
-   * Listen to recent messages in a chat (real-time) - IMPROVED VERSION
-   * Only loads the most recent messages for real-time updates
+   * Listen to recent messages in a chat - UPDATED WITH DECRYPTION
+   * 🔐 Now automatically decrypts encrypted messages for display
    */
   static listenToRecentMessages(
     chatId: string,
@@ -313,12 +396,39 @@ export class MessageService {
       );
 
       const unsubscribe = onSnapshot(q, async (snapshot) => {
+        // 🔐 Get chat info for decryption
+        const chat = await ChatService.getChatById(chatId);
+        let chatKey: string | null = null;
         
+        if (chat && (chat.isSecretChat || chat.encryptionEnabled)) {
+          try {
+            chatKey = await EncryptionService.generateChatKey(
+              chat.participants[0], 
+              chat.participants[1]
+            );
+          } catch (error) {
+            console.error('Failed to generate chat key:', error);
+          }
+        }
+
         const messages: Message[] = snapshot.docs.map(doc => {
           const data = doc.data();
+          
+          // 🔐 Decrypt message content if encrypted
+          let decryptedContent = data.content;
+          if (data.isEncrypted && chatKey && data.content) {
+            try {
+              decryptedContent = EncryptionService.decryptMessage(data.content, chatKey);
+            } catch (error) {
+              console.error('Failed to decrypt message:', error);
+              decryptedContent = '🔒 Failed to decrypt message';
+            }
+          }
+          
           const message = {
             id: doc.id,
             ...data,
+            content: decryptedContent, // 🔐 Use decrypted content for display
             // Convert Firestore timestamp to ISO string safely
             timestamp: this.convertTimestamp(data.timestamp),
           } as Message;
@@ -363,7 +473,7 @@ export class MessageService {
   }
 
   /**
-   * Load older messages with pagination (for "Load More" functionality)
+   * Load older messages with pagination - UPDATED WITH DECRYPTION
    */
   static async loadOlderMessages(
     chatId: string,
@@ -391,11 +501,39 @@ export class MessageService {
 
       const snapshot = await getDocs(q);
       
+      // 🔐 Get chat info for decryption
+      const chat = await ChatService.getChatById(chatId);
+      let chatKey: string | null = null;
+      
+      if (chat && (chat.isSecretChat || chat.encryptionEnabled)) {
+        try {
+          chatKey = await EncryptionService.generateChatKey(
+            chat.participants[0], 
+            chat.participants[1]
+          );
+        } catch (error) {
+          console.error('Failed to generate chat key:', error);
+        }
+      }
+      
       const messages: Message[] = snapshot.docs.map(doc => {
         const data = doc.data();
+        
+        // 🔐 Decrypt message content if encrypted
+        let decryptedContent = data.content;
+        if (data.isEncrypted && chatKey && data.content) {
+          try {
+            decryptedContent = EncryptionService.decryptMessage(data.content, chatKey);
+          } catch (error) {
+            console.error('Failed to decrypt message:', error);
+            decryptedContent = '🔒 Failed to decrypt message';
+          }
+        }
+        
         return {
           id: doc.id,
           ...data,
+          content: decryptedContent, // 🔐 Use decrypted content
           timestamp: this.convertTimestamp(data.timestamp),
         } as Message;
       }).reverse(); // Reverse to show oldest first
@@ -468,6 +606,9 @@ export class MessageService {
         content: 'This message was deleted',
         type: 'deleted',
         editedAt: new Date().toISOString(),
+        // 🔐 Clear encryption data when deleting
+        isEncrypted: false,
+        encryptedContent: null,
         // Remove media data if it exists
         imageData: null,
         videoData: null,
@@ -482,7 +623,7 @@ export class MessageService {
   }
 
   /**
-   * Edit a message (text only)
+   * Edit a message (text only) - UPDATED WITH ENCRYPTION
    */
   static async editMessage(
     chatId: string, 
@@ -490,10 +631,33 @@ export class MessageService {
     newContent: string
   ): Promise<void> {
     try {
+      // 🔐 Check if this message should be encrypted
+      const chat = await ChatService.getChatById(chatId);
+      const shouldEncrypt = chat?.isSecretChat || chat?.encryptionEnabled;
+      
+      let finalContent = newContent;
+      let encryptedContent: string | undefined;
+      
+      if (shouldEncrypt) {
+        try {
+          const chatKey = await EncryptionService.generateChatKey(
+            chat!.participants[0], 
+            chat!.participants[1]
+          );
+          encryptedContent = await EncryptionService.encryptMessage(newContent, chatKey);
+          finalContent = encryptedContent;
+        } catch (error) {
+          console.error('Failed to encrypt edited message:', error);
+        }
+      }
+      
       const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
       await updateDoc(messageRef, {
-        content: newContent,
-        editedAt: new Date().toISOString()
+        content: finalContent, // 🔐 May be encrypted
+        editedAt: new Date().toISOString(),
+        // 🔐 Update encryption metadata
+        isEncrypted: shouldEncrypt && !!encryptedContent,
+        ...(encryptedContent && { encryptedContent }),
       });
     } catch (error) {
       throw new AppError(

@@ -8,6 +8,7 @@ export enum ErrorType {
   PERMISSION = 'PERMISSION',
   STORAGE = 'STORAGE',
   BIOMETRIC = 'BIOMETRIC',
+  ENCRYPTION = 'ENCRYPTION',
   UNKNOWN = 'UNKNOWN',
 }
 
@@ -39,7 +40,10 @@ export class ErrorService {
    * Handle and display errors to users
    */
   static handleError(error: any, context?: string): void {
+    console.error('Error occurred:', error);
     const appError = this.processError(error, context);
+    console.error('Processed AppError:', appError);
+    console.log('Context:', appError.type);
     
     // Log error for debugging
     this.logError(appError, context);
@@ -54,6 +58,7 @@ export class ErrorService {
   private static processError(error: any, context?: string): AppError {
     // If it's already an AppError, return it
     if (error instanceof AppError) {
+      console.log('🔴 Already an AppError:', error.type);
       return error;
     }
 
@@ -90,6 +95,24 @@ export class ErrorService {
       return new AppError(
         ErrorType.PERMISSION,
         'Permission required. Please check your settings and try again',
+        error
+      );
+    }
+
+    // Handle biometric authentication errors
+    if (error?.name === 'BiometricError') {
+      return new AppError(
+        ErrorType.BIOMETRIC,
+        'Biometric authentication failed. Please try again',
+        error
+      );
+    }
+
+    // Handle encryption errors
+    if (error?.name === 'EncryptionError') {
+      return new AppError(
+        ErrorType.ENCRYPTION,
+        'Failed to encrypt message. Please try again',
         error
       );
     }
@@ -171,6 +194,8 @@ export class ErrorService {
         return 'Data Error';
       case ErrorType.BIOMETRIC:
         return 'Authentication Failed';
+      case ErrorType.ENCRYPTION:
+        return 'Encryption Error';
       default:
         return 'Error';
     }

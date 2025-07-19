@@ -1,4 +1,4 @@
-// app/(tabs)/index.tsx
+// app/(tabs)/index.tsx 
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -50,8 +50,15 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
       return 'No messages yet';
     }
 
-    const { content, isOwnMessage, senderUsername } = item.lastMessage;
-    const preview = content.length > 50 ? `${content.substring(0, 50)}...` : content;
+    const { content, isOwnMessage, senderUsername, isEncrypted } = item.lastMessage;
+    
+    // 🔐 Handle encrypted message previews
+    let preview = content;
+    if (isEncrypted && content === '🔒 Encrypted message') {
+      preview = '🔒 Encrypted message';
+    } else {
+      preview = content.length > 50 ? `${content.substring(0, 50)}...` : content;
+    }
     
     if (isOwnMessage) {
       return `You: ${preview}`;
@@ -59,6 +66,18 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
       return preview;
     }
   };
+
+  // 🔐 Get encryption icon for chat
+  const getEncryptionIcon = () => {
+    if (item.chat.isSecretChat) {
+      return '🔒'; // Secret chat
+    } else if (item.chat.encryptionEnabled) {
+      return '🔐'; // Encrypted chat
+    }
+    return null; // Regular chat
+  };
+
+  const encryptionIcon = getEncryptionIcon();
 
   return (
     <TouchableOpacity
@@ -90,23 +109,39 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
 
       <View style={styles.chatContent}>
         <View style={styles.chatHeader}>
-          <Text style={styles.chatName}>
-            {item.otherParticipant.displayName || item.otherParticipant.username}
-          </Text>
+          <View style={styles.chatNameContainer}>
+            <Text style={styles.chatName}>
+              {item.otherParticipant.displayName || item.otherParticipant.username}
+            </Text>
+            {/* 🔐 Encryption indicator */}
+            {encryptionIcon && (
+              <Text style={styles.encryptionIndicator}>{encryptionIcon}</Text>
+            )}
+          </View>
           <Text style={styles.timestamp}>
             {item.lastMessage ? formatTime(item.lastMessage.timestamp) : ''}
           </Text>
         </View>
         
-        <Text 
-          style={[
-            styles.lastMessage,
-            item.unreadCount > 0 && styles.unreadMessage
-          ]}
-          numberOfLines={1}
-        >
-          {getLastMessagePreview()}
-        </Text>
+        <View style={styles.messagePreviewContainer}>
+          <Text 
+            style={[
+              styles.lastMessage,
+              item.unreadCount > 0 && styles.unreadMessage,
+              // 🔐 Style encrypted message previews differently
+              item.lastMessage?.isEncrypted && styles.encryptedMessage
+            ]}
+            numberOfLines={1}
+          >
+            {getLastMessagePreview()}
+          </Text>
+          {/* 🔐 Show encryption badge for encrypted chats */}
+          {item.chat.isSecretChat && (
+            <View style={styles.secretChatBadge}>
+              <Text style={styles.secretChatBadgeText}>SECRET</Text>
+            </View>
+          )}
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -123,7 +158,17 @@ export default function ChatsScreen() {
     if (!user) return;
 
     const unsubscribe = ChatService.listenToUserChats(user.uid, (userChats) => {
-      setChats(userChats);
+      // 🔐 Sort chats to show secret chats prominently if needed
+      const sortedChats = userChats.sort((a, b) => {
+        // First sort by secret chat status (secret chats first)
+        if (a.chat.isSecretChat && !b.chat.isSecretChat) return -1;
+        if (!a.chat.isSecretChat && b.chat.isSecretChat) return 1;
+        
+        // Then sort by last activity
+        return new Date(b.chat.lastActivity).getTime() - new Date(a.chat.lastActivity).getTime();
+      });
+      
+      setChats(sortedChats);
       setLoading(false);
     });
 
@@ -159,6 +204,9 @@ export default function ChatsScreen() {
         <Text style={styles.emptySubtitle}>
           Start a conversation with your contacts!
         </Text>
+        <Text style={styles.emptyHint}>
+          💡 Tip: You can create regular chats or secure secret chats
+        </Text>
         <TouchableOpacity
           style={styles.contactsButton}
           onPress={() => router.push('/(tabs)/contacts')}
@@ -171,6 +219,13 @@ export default function ChatsScreen() {
 
   return (
     <View style={styles.container}>
+      {/* 🔐 Header with encryption info */}
+      <View style={styles.headerInfo}>
+        <Text style={styles.headerInfoText}>
+          🔒 Secret chats use end-to-end encryption for maximum security
+        </Text>
+      </View>
+      
       <FlatList
         data={chats}
         renderItem={renderChat}
@@ -188,6 +243,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  // 🔐 Header info styles
+  headerInfo: {
+    backgroundColor: '#f0f8ff',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  headerInfoText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   centerContainer: {
     flex: 1,
@@ -209,7 +278,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 10,
+  },
+  // 🔐 Encryption hint
+  emptyHint: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
     marginBottom: 30,
+    fontStyle: 'italic',
   },
   contactsButton: {
     backgroundColor: '#007AFF',
@@ -232,6 +309,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
+    // 🔐 Add slight background for secret chats
+    backgroundColor: '#fff',
   },
   avatarContainer: {
     position: 'relative',
@@ -280,22 +359,58 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  // 🔐 Chat name container with encryption indicator
+  chatNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
   chatName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
     flex: 1,
   },
+  // 🔐 Encryption indicator styles
+  encryptionIndicator: {
+    fontSize: 14,
+    marginLeft: 4,
+  },
   timestamp: {
     fontSize: 12,
     color: '#999',
   },
+  // 🔐 Message preview container
+  messagePreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   lastMessage: {
     fontSize: 14,
     color: '#666',
+    flex: 1,
   },
   unreadMessage: {
     fontWeight: '600',
     color: '#333',
+  },
+  // 🔐 Encrypted message styling
+  encryptedMessage: {
+    fontStyle: 'italic',
+    color: '#34C759',
+  },
+  // 🔐 Secret chat badge
+  secretChatBadge: {
+    backgroundColor: '#ffcc02',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  secretChatBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#8b7500',
   },
 });

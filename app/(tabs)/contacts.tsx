@@ -1,4 +1,4 @@
-// app/(tabs)/contacts.tsx - Updated ContactItem component
+// app/(tabs)/contacts.tsx
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -26,10 +26,13 @@ type TabType = 'contacts' | 'requests' | 'search' | 'scan';
 interface ContactItemProps {
   contact: Contact;
   onRemove: (contact: Contact) => void;
-  onStartChat: (contact: Contact) => void;
+  onStartChat: (contact: Contact, isSecret?: boolean) => void; // 🔐 isSecret parameter
+  loading: boolean;
 }
 
-const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartChat }) => {
+const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartChat, loading }) => {
+  const [showChatOptions, setShowChatOptions] = useState(false); // 🔐 Show chat type options
+
   const handleRemove = () => {
     Alert.alert(
       'Remove Contact',
@@ -40,6 +43,63 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartCha
       ]
     );
   };
+
+  // 🔐 Show chat type selection modal
+  const ChatOptionsModal = () => (
+    <Modal
+      visible={showChatOptions}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowChatOptions(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Start Chat with {contact.username}</Text>
+          
+          <TouchableOpacity
+            style={[styles.chatOptionButton, styles.regularChatButton]}
+            onPress={() => {
+              setShowChatOptions(false);
+              onStartChat(contact, false);
+            }}
+            disabled={loading}
+          >
+            <Text style={styles.chatOptionIcon}>💬</Text>
+            <View style={styles.chatOptionTextContainer}>
+              <Text style={styles.chatOptionTitle}>Regular Chat</Text>
+              <Text style={styles.chatOptionDescription}>
+                Standard messaging with cloud backup
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.chatOptionButton, styles.secretChatButton]}
+            onPress={() => {
+              setShowChatOptions(false);
+              onStartChat(contact, true);
+            }}
+            disabled={loading}
+          >
+            <Text style={styles.chatOptionIcon}>🔒</Text>
+            <View style={styles.chatOptionTextContainer}>
+              <Text style={styles.chatOptionTitle}>Secret Chat</Text>
+              <Text style={styles.chatOptionDescription}>
+                End-to-end encrypted messaging
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => setShowChatOptions(false)}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
 
   return (
     <View style={styles.contactItem}>
@@ -58,9 +118,11 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartCha
       </View>
       
       <View style={styles.contactActions}>
+        {/* 🔐 Changed to show chat options */}
         <TouchableOpacity
           style={styles.chatButton}
-          onPress={() => onStartChat(contact)}
+          onPress={() => setShowChatOptions(true)}
+          disabled={loading}
         >
           <Text style={styles.chatButtonText}>Chat</Text>
         </TouchableOpacity>
@@ -72,6 +134,9 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartCha
           <Text style={styles.removeButtonText}>Remove</Text>
         </TouchableOpacity>
       </View>
+
+      {/* 🔐 Chat options modal */}
+      <ChatOptionsModal />
     </View>
   );
 };
@@ -115,7 +180,8 @@ export default function ContactsScreen() {
     }
   };
 
-  const handleStartChat = async (contact: Contact) => {
+  // 🔐 Handle both regular and secret chat creation
+  const handleStartChat = async (contact: Contact, isSecret: boolean = false) => {
     if (!user || creatingChat) return;
 
     setCreatingChat(true);
@@ -127,11 +193,27 @@ export default function ContactsScreen() {
         return;
       }
 
-      // Create or get existing chat
-      const chatId = await ChatService.createChat(currentUserProfile, contact);
+      // Create appropriate chat type
+      const chatId = isSecret 
+        ? await ChatService.createSecretChat(currentUserProfile, contact)
+        : await ChatService.createChat(currentUserProfile, contact);
       
-      // Navigate to chat
-      router.push(`/chat/${chatId}`);
+      // Show confirmation for secret chats
+      if (isSecret) {
+        Alert.alert(
+          '🔒 Secret Chat Created',
+          `Your secret chat with ${contact.username} is now encrypted end-to-end. Messages will be secured with encryption.`,
+          [
+            {
+              text: 'Start Chatting',
+              onPress: () => router.push(`/chat/${chatId}`),
+            },
+          ]
+        );
+      } else {
+        // Navigate to regular chat immediately
+        router.push(`/chat/${chatId}`);
+      }
     } catch (error) {
       ErrorService.handleError(error, 'Start Chat');
     } finally {
@@ -154,6 +236,7 @@ export default function ContactsScreen() {
       contact={item}
       onRemove={handleRemoveContact}
       onStartChat={handleStartChat}
+      loading={creatingChat}
     />
   );
 
@@ -262,7 +345,9 @@ export default function ContactsScreen() {
 
       {creatingChat && (
         <View style={styles.loadingOverlay}>
-          <Text style={styles.loadingOverlayText}>Starting chat...</Text>
+          <Text style={styles.loadingOverlayText}>
+            {creatingChat ? 'Starting chat...' : 'Processing...'}
+          </Text>
         </View>
       )}
     </View>
@@ -431,6 +516,72 @@ const styles = StyleSheet.create({
   loadingOverlayText: {
     color: '#fff',
     fontSize: 16,
+    fontWeight: '600',
+  },
+  // 🔐 Modal styles for chat options
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#333',
+  },
+  chatOptionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+  },
+  regularChatButton: {
+    backgroundColor: '#f8f9fa',
+    borderColor: '#e9ecef',
+  },
+  secretChatButton: {
+    backgroundColor: '#fff3e0',
+    borderColor: '#ffcc02',
+  },
+  chatOptionIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  chatOptionTextContainer: {
+    flex: 1,
+  },
+  chatOptionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 2,
+  },
+  chatOptionDescription: {
+    fontSize: 14,
+    color: '#666',
+  },
+  cancelButton: {
+    padding: 16,
+    alignItems: 'center',
+    borderRadius: 8,
+    backgroundColor: '#f8f9fa',
+    marginTop: 8,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: '#666',
     fontWeight: '600',
   },
 });

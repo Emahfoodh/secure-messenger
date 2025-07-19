@@ -20,6 +20,7 @@ import { Chat, ChatListItem, ChatParticipant } from '@/types/messageTypes';
 import { Contact } from '@/services/contactService';
 import { getUserProfile, UserProfile } from '@/services/userService';
 import { AppError, ErrorType } from '@/services/errorService';
+import { EncryptionService } from '@/services/encryptionService'; // 🔐 NEW
 
 export class ChatService {
   /**
@@ -51,15 +52,22 @@ export class ChatService {
 
   /**
    * Create a new chat between users
+   * 🔐 Now supports creating secret chats with encryption
    */
   static async createChat(
     currentUser: UserProfile,
-    contact: Contact
+    contact: Contact,
+    isSecretChat: boolean = false // 🔐 Flag for secret chat
   ): Promise<string> {
     try {
       // Create deterministic chat ID (always same order)
       const participants = [currentUser.uid, contact.uid].sort();
-      const chatId = participants.join('_');
+      let chatId = participants.join('_');
+      
+      // 🔐 For secret chats, add prefix to differentiate
+      if (isSecretChat) {
+        chatId = `secret_${chatId}`;
+      }
 
       // Check if chat already exists
       const existingChat = await getDoc(doc(db, 'chats', chatId));
@@ -102,6 +110,9 @@ export class ChatService {
           [contact.uid]: 0,
         },
         isActive: true,
+        // 🔐 Encryption settings
+        isSecretChat,
+        encryptionEnabled: isSecretChat,
       };
 
       // Create chat document
@@ -123,6 +134,7 @@ export class ChatService {
           },
           lastActivity: serverTimestamp(),
           unreadCount: 0,
+          isSecretChat, // 🔐 Track if this is a secret chat
         }),
         setDoc(doc(db, 'users', contact.uid, 'chats', chatId), {
           chatId,
@@ -134,6 +146,7 @@ export class ChatService {
           },
           lastActivity: serverTimestamp(),
           unreadCount: 0,
+          isSecretChat, // 🔐 Track if this is a secret chat
         })
       ]);
 
@@ -151,15 +164,24 @@ export class ChatService {
   }
 
   /**
-   * Get user's chat list with real-time updates - FIXED VERSION
+   * 🔐 Create a secret chat specifically
+   */
+  static async createSecretChat(
+    currentUser: UserProfile,
+    contact: Contact
+  ): Promise<string> {
+    return this.createChat(currentUser, contact, true);
+  }
+
+  /**
+   * Get user's chat list with real-time updates - UPDATED WITH ENCRYPTION SUPPORT
    */
   static listenToUserChats(
     userId: string,
     callback: (chats: ChatListItem[]) => void
   ): () => void {
     try {
-      // Listen to the main chats collection instead of user's subcollection
-      // This ensures we get real-time updates when lastMessage changes
+      // Listen to the main chats collection
       const chatsRef = collection(db, 'chats');
       const q = query(
         chatsRef, 
@@ -182,11 +204,26 @@ export class ChatService {
           const userChatDoc = await getDoc(doc(db, 'users', userId, 'chats', chatDoc.id));
           const unreadCount = userChatDoc.exists() ? (userChatDoc.data().unreadCount || 0) : 0;
 
+          // 🔐 Decrypt last message if it's encrypted
+          let lastMessageContent = fullChat.lastMessage?.content;
+          if (fullChat.lastMessage?.isEncrypted && lastMessageContent) {
+            try {
+              const chatKey = await EncryptionService.generateChatKey(
+                fullChat.participants[0], 
+                fullChat.participants[1]
+              );
+              lastMessageContent = await EncryptionService.decryptMessage(lastMessageContent, chatKey);
+            } catch (error) {
+              console.error('Failed to decrypt last message preview:', error);
+              lastMessageContent = '🔒 Encrypted message';
+            }
+          }
+
           const chatListItem: ChatListItem = {
             chat: {
               ...fullChat,
               id: chatDoc.id,
-              // Convert timestamps properly - handle both Timestamp objects and strings
+              // Convert timestamps properly
               createdAt: this.convertTimestamp(fullChat.createdAt),
               lastActivity: this.convertTimestamp(fullChat.lastActivity),
             },
@@ -198,11 +235,12 @@ export class ChatService {
             },
             unreadCount,
             lastMessage: fullChat.lastMessage ? {
-              content: fullChat.lastMessage.content,
+              content: lastMessageContent || 'No content', // 🔐 Use decrypted content
               senderId: fullChat.lastMessage.senderId,
               senderUsername: fullChat.lastMessage.senderUsername,
               timestamp: fullChat.lastMessage.timestamp,
               isOwnMessage: fullChat.lastMessage.senderId === userId,
+              isEncrypted: fullChat.lastMessage.isEncrypted, // 🔐 Show encryption status
             } : undefined,
           };
 
@@ -231,14 +269,15 @@ export class ChatService {
   }
 
   /**
-   * Update last message in chat - IMPROVED VERSION WITH VIDEO SUPPORT
+   * Update last message in chat - UPDATED WITH ENCRYPTION SUPPORT
    */
   static async updateLastMessage(
     chatId: string,
     senderId: string,
     senderUsername: string,
     content: string,
-    type: 'text' | 'image' | 'video' | 'file' = 'text'
+    type: 'text' | 'image' | 'video' | 'file' = 'text',
+    isEncrypted: boolean = false // 🔐 Track if message is encrypted
   ): Promise<void> {
     try {
       // Use a batch to ensure atomicity
@@ -246,14 +285,39 @@ export class ChatService {
       
       const chatRef = doc(db, 'chats', chatId);
       
+      // 🔐 For encrypted messages, store encrypted content in lastMessage
+      let lastMessageContent = content;
+      if (isEncrypted) {
+        // Get chat info to determine encryption key
+        const chatDoc = await getDoc(chatRef);
+        if (chatDoc.exists()) {
+          const chatData = chatDoc.data() as Chat;
+          if (chatData.encryptionEnabled) {
+            try {
+              const chatKey = await EncryptionService.generateChatKey(
+                chatData.participants[0], 
+                chatData.participants[1]
+              );
+              lastMessageContent = await EncryptionService.encryptMessage(content, chatKey);
+            } catch (error) {
+              console.error('Failed to encrypt last message:', error);
+              // Fall back to unencrypted if encryption fails
+              lastMessageContent = content;
+              isEncrypted = false;
+            }
+          }
+        }
+      }
+      
       // Update the main chat document
       batch.update(chatRef, {
         lastMessage: {
-          content,
+          content: lastMessageContent, // 🔐 May be encrypted
           senderId,
           senderUsername,
           timestamp: new Date().toISOString(),
           type,
+          isEncrypted, // 🔐 Track encryption status
         },
         lastActivity: serverTimestamp(),
       });
@@ -341,6 +405,36 @@ export class ChatService {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to get chat',
+        error
+      );
+    }
+  }
+
+  /**
+   * 🔐 Check if a chat is a secret chat
+   */
+  static async isSecretChat(chatId: string): Promise<boolean> {
+    try {
+      const chat = await this.getChatById(chatId);
+      return chat?.isSecretChat || false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * 🔐 Enable/disable encryption for a chat
+   */
+  static async toggleChatEncryption(chatId: string, enabled: boolean): Promise<void> {
+    try {
+      const chatRef = doc(db, 'chats', chatId);
+      await updateDoc(chatRef, {
+        encryptionEnabled: enabled,
+      });
+    } catch (error) {
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Failed to toggle chat encryption',
         error
       );
     }

@@ -1,4 +1,5 @@
 // app/chat/[id].tsx
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -89,7 +90,7 @@ export default function ChatScreen() {
     return unsubscribe;
   }, [chatId, user]);
 
-  // Update displayed messages when allMessages changes - FIXED
+  // Update displayed messages when allMessages changes
   useEffect(() => {
     setMessages(allMessages);
   }, [allMessages]);
@@ -189,14 +190,23 @@ export default function ChatScreen() {
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
+      // 🔐 Send message (encryption handled automatically in MessageService)
       await MessageService.sendMessage(chatId, user.uid, {
         content: messageContent,
         type: 'text',
+        // shouldEncrypt is automatically determined by chat type
       });
 
-      // Update last message and unread counts
+      // 🔐 Include encryption status in last message update
       await Promise.all([
-        ChatService.updateLastMessage(chatId, user.uid, senderUsername, messageContent),
+        ChatService.updateLastMessage(
+          chatId, 
+          user.uid, 
+          senderUsername, 
+          messageContent, 
+          'text',
+          chat?.isSecretChat || chat?.encryptionEnabled || false // Pass encryption status
+        ),
         chat ? Promise.all(
           chat.participants.filter(p => p !== user.uid).map(participantId => 
             ChatService.incrementUnreadCount(chatId, participantId)
@@ -231,12 +241,19 @@ export default function ChatScreen() {
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
-      // Send actual image message
+      // Send actual image message (encryption handled automatically)
       await MessageService.sendImageMessage(chatId, user.uid, image.uri);
 
       // Update last message and unread counts
       await Promise.all([
-        ChatService.updateLastMessage(chatId, user.uid, senderUsername, '📷 Photo', 'image'),
+        ChatService.updateLastMessage(
+          chatId, 
+          user.uid, 
+          senderUsername, 
+          '📷 Photo', 
+          'image',
+          chat?.isSecretChat || chat?.encryptionEnabled || false
+        ),
         chat ? Promise.all(
           chat.participants.filter(p => p !== user.uid).map(participantId => 
             ChatService.incrementUnreadCount(chatId, participantId)
@@ -251,7 +268,6 @@ export default function ChatScreen() {
     }
   };
 
-  // NEW: Handle video selection
   const handleVideoSelected = async (video: ImagePicker.ImagePickerAsset) => {
     if (!user || !chatId || sendingVideo) return;
 
@@ -270,12 +286,19 @@ export default function ChatScreen() {
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
-      // Send actual video message
+      // Send actual video message (encryption handled automatically)
       await MessageService.sendVideoMessage(chatId, user.uid, video);
 
       // Update last message and unread counts
       await Promise.all([
-        ChatService.updateLastMessage(chatId, user.uid, senderUsername, '🎥 Video', 'video'),
+        ChatService.updateLastMessage(
+          chatId, 
+          user.uid, 
+          senderUsername, 
+          '🎥 Video', 
+          'video',
+          chat?.isSecretChat || chat?.encryptionEnabled || false
+        ),
         chat ? Promise.all(
           chat.participants.filter(p => p !== user.uid).map(participantId => 
             ChatService.incrementUnreadCount(chatId, participantId)
@@ -290,10 +313,9 @@ export default function ChatScreen() {
     }
   };
 
-  // Optimized render function with keyExtractor (adjusted for inverted list)
+  // Optimized render function with keyExtractor
   const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isOwnMessage = item.senderId === user?.uid;
-    // In inverted list, next message is at index + 1
     const nextMessage = index < messages.length - 1 ? messages[index + 1] : null;
     const showSender = !nextMessage || nextMessage.senderId !== item.senderId;
 
@@ -323,6 +345,36 @@ export default function ChatScreen() {
 
   const otherParticipant = getOtherParticipant();
 
+  // 🔐 Get encryption status info
+  const getEncryptionInfo = () => {
+    if (!chat) return null;
+    
+    if (chat.isSecretChat) {
+      return {
+        isEncrypted: true,
+        label: 'Secret Chat',
+        icon: '🔒',
+        description: 'Messages are end-to-end encrypted'
+      };
+    } else if (chat.encryptionEnabled) {
+      return {
+        isEncrypted: true,
+        label: 'Encrypted',
+        icon: '🔐',
+        description: 'Messages are encrypted'
+      };
+    }
+    
+    return {
+      isEncrypted: false,
+      label: 'Regular Chat',
+      icon: '💬',
+      description: 'Standard messaging'
+    };
+  };
+
+  const encryptionInfo = getEncryptionInfo();
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -337,7 +389,7 @@ export default function ChatScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Chat Header */}
+      {/* Chat Header - UPDATED WITH ENCRYPTION STATUS */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
@@ -361,15 +413,38 @@ export default function ChatScreen() {
           )}
           
           <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>
-              {otherParticipant?.displayName || otherParticipant?.username}
-            </Text>
+            <View style={styles.headerTitleRow}>
+              <Text style={styles.headerTitle}>
+                {otherParticipant?.displayName || otherParticipant?.username}
+              </Text>
+              {/* 🔐 Encryption indicator */}
+              {encryptionInfo && (
+                <View style={styles.encryptionBadge}>
+                  <Text style={styles.encryptionIcon}>{encryptionInfo.icon}</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.headerSubtitle}>
               @{otherParticipant?.username}
             </Text>
+            {/* 🔐 Encryption status text */}
+            {encryptionInfo && encryptionInfo.isEncrypted && (
+              <Text style={styles.encryptionStatus}>
+                {encryptionInfo.description}
+              </Text>
+            )}
           </View>
         </View>
       </View>
+
+      {/* 🔐 Secret chat notification banner */}
+      {chat?.isSecretChat && (
+        <View style={styles.secretChatBanner}>
+          <Text style={styles.secretChatText}>
+            🔒 This is a secret chat. Messages are end-to-end encrypted.
+          </Text>
+        </View>
+      )}
 
       {/* Messages List with Pagination - INVERTED */}
       <View style={styles.messagesContainer}>
@@ -380,7 +455,7 @@ export default function ChatScreen() {
           keyExtractor={keyExtractor}
           style={styles.messagesList}
           contentContainerStyle={styles.messagesContent}
-          inverted={true} // This is the key - inverted list
+          inverted={true}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.1}
           ListFooterComponent={
@@ -391,11 +466,11 @@ export default function ChatScreen() {
               </View>
             ) : null
           }
-          removeClippedSubviews={true} // Performance optimization
-          maxToRenderPerBatch={10} // Render fewer items per batch
-          updateCellsBatchingPeriod={50} // Update batching period
-          windowSize={10} // Reduce window size
-          initialNumToRender={15} // Reduce initial render count
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          windowSize={10}
+          initialNumToRender={15}
         />
       </View>
 
@@ -439,7 +514,11 @@ export default function ChatScreen() {
 
           <TextInput
             style={styles.textInput}
-            placeholder="Type a message..."
+            placeholder={
+              encryptionInfo?.isEncrypted 
+                ? "Type an encrypted message..." 
+                : "Type a message..."
+            }
             placeholderTextColor="#999"
             value={inputText}
             onChangeText={setInputText}
@@ -550,14 +629,46 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
   },
+  // 🔐 Encryption indicator styles
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#333',
+    flex: 1,
+  },
+  encryptionBadge: {
+    marginLeft: 8,
+  },
+  encryptionIcon: {
+    fontSize: 16,
   },
   headerSubtitle: {
     fontSize: 14,
     color: '#666',
+  },
+  encryptionStatus: {
+    fontSize: 12,
+    color: '#34C759',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  // 🔐 Secret chat banner
+  secretChatBanner: {
+    backgroundColor: '#fff3e0',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ffcc02',
+  },
+  secretChatText: {
+    fontSize: 12,
+    color: '#b8860b',
+    textAlign: 'center',
+    fontWeight: '500',
   },
   messagesContainer: {
     flex: 1,
