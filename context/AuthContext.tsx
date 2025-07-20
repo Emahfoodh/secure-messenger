@@ -74,7 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const biometricError = new AppError(
         ErrorType.BIOMETRIC,
         "Failed to check biometric settings",
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error as string)
       );
       ErrorService.handleError(biometricError, "Check Biometric Status");
     }
@@ -104,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const biometricError = new AppError(
         ErrorType.BIOMETRIC,
         "Biometric authentication failed. Please try again",
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error as string)
       );
       ErrorService.handleError(biometricError, "Biometric Authentication");
       return false;
@@ -124,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       const biometricError = new AppError(
         ErrorType.BIOMETRIC,
         `Failed to ${enabled ? "enable" : "disable"} biometric authentication`,
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error as string)
       );
       ErrorService.handleError(biometricError, "Set Biometric Enabled");
     }

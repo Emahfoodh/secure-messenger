@@ -178,14 +178,11 @@ export class ChatService {
       ]);
 
       return chatId;
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to create chat',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -281,16 +278,16 @@ export class ChatService {
         throw new AppError(
           ErrorType.STORAGE,
           'Failed to load chats',
-          error
+          error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
         );
       });
 
       return unsubscribe;
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to set up chat listener',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -363,11 +360,11 @@ export class ChatService {
       }
 
       await batch.commit();
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to update last message',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -386,11 +383,11 @@ export class ChatService {
           unreadCount: currentUnread + 1,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to update unread count',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -404,11 +401,11 @@ export class ChatService {
       await updateDoc(userChatRef, {
         unreadCount: 0,
       });
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to mark chat as read',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -428,11 +425,11 @@ export class ChatService {
         createdAt: this.convertTimestamp(chatData.createdAt),
         lastActivity: this.convertTimestamp(chatData.lastActivity),
       } as Chat;
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to get chat',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -458,11 +455,11 @@ export class ChatService {
       await updateDoc(chatRef, {
         encryptionEnabled: enabled,
       });
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to toggle chat encryption',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }

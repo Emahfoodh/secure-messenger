@@ -24,11 +24,11 @@ export const parseQRData = (qrString: string): QRUserData | null => {
       return parsed as QRUserData;
     }
     return null;
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.VALIDATION,
       'Invalid QR code format',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };

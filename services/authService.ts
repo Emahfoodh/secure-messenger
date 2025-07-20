@@ -39,13 +39,10 @@ export const signUp = async (
 
     return { success: true, user };
   } catch (error: any) {
-    if (error instanceof AppError) {
-      throw error;
-    }
     throw new AppError(
       ErrorType.AUTH,
       getAuthErrorMessage(error),
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -59,13 +56,10 @@ export const signIn = async (email: string, password: string): Promise<AuthResul
     
     return { success: true, user: userCredential.user };
   } catch (error: any) {
-    if (error instanceof AppError) {
-      throw error;
-    }
     throw new AppError(
       ErrorType.AUTH,
       getAuthErrorMessage(error),
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };

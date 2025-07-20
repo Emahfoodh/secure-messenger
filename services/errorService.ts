@@ -2,52 +2,64 @@ import { Alert } from 'react-native';
 
 // Error types for better categorization
 export enum ErrorType {
-  NETWORK = 'NETWORK',
   AUTH = 'AUTH',
+  STORAGE = 'STORAGE',
+  NETWORK = 'NETWORK',
   VALIDATION = 'VALIDATION',
   PERMISSION = 'PERMISSION',
-  STORAGE = 'STORAGE',
   BIOMETRIC = 'BIOMETRIC',
   ENCRYPTION = 'ENCRYPTION',
-  UNKNOWN = 'UNKNOWN',
+  UNKNOWN = 'UNKNOWN'
 }
 
-// Custom error class
 export class AppError extends Error {
-  public type: ErrorType;
-  public userMessage: string;
-  public originalError?: any;
+  readonly type: ErrorType;
+  readonly userMessage: string;
+  readonly originalError?: Error | AppError;
+  readonly message: string;
 
   constructor(
     type: ErrorType,
     userMessage: string,
-    originalError?: any,
-    developerMessage?: string
+    originalError?: Error | AppError,
   ) {
-    super(developerMessage || userMessage);
+    // If no specific message provided, use userMessage
+    super(userMessage);
+    
     this.type = type;
     this.userMessage = userMessage;
     this.originalError = originalError;
-    this.name = 'AppError';
+    this.message = originalError?.message || userMessage;
+    // Ensure proper prototype chain for instanceof checks
+    Object.setPrototypeOf(this, AppError.prototype);
+    
+    // Capture stack trace
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, AppError);
+    }
+
+    // Preserve original error's stack if it exists
+    if (originalError?.stack) {
+      this.stack = `${this.stack}\nCaused by: ${originalError.stack}`;
+    }
   }
 }
 
 // Error service class
 export class ErrorService {
-  private static isDevelopment = __DEV__;
+  private static isDevelopment = process.env.EXPO_PUBLIC_NODE_ENV !== 'production';
 
   /**
    * Handle and display errors to users
    */
   static handleError(error: any, context?: string): void {
-    console.error('Error occurred:', error);
     const appError = this.processError(error, context);
-    console.error('Processed AppError:', appError);
-    console.log('Context:', appError.type);
     
     // Log error for debugging
-    this.logError(appError, context);
-    
+    if (this.isDevelopment) {
+      this.logError(appError, context);
+    }
+
     // Show user-friendly message
     this.showUserError(appError);
   }
@@ -122,7 +134,6 @@ export class ErrorService {
       ErrorType.UNKNOWN,
       'Something went wrong. Please try again',
       error,
-      error?.message
     );
   }
 
@@ -202,17 +213,29 @@ export class ErrorService {
   }
 
   /**
-   * Log error for debugging
+   * Log error details in development
    */
   private static logError(error: AppError, context?: string): void {
-    if (this.isDevelopment) {
       console.group(`🔴 ${error.type} Error ${context ? `(${context})` : ''}`);
       console.error('User Message:', error.userMessage);
       console.error('Error Details:', error.message);
+      
       if (error.originalError) {
-        console.error('Original Error:', error.originalError);
+        console.group('Error Chain:');
+        let currentError: Error | AppError | undefined = error.originalError;
+        
+        while (currentError) {
+          if (currentError instanceof AppError) {
+            console.error(`├─ ${currentError.message}`);
+            currentError = currentError.originalError;
+          } else {
+            console.error(`└─ Root Cause:`,  currentError);
+            break
+          }
+        }
+
+        console.groupEnd();
       }
       console.groupEnd();
-    }
   }
 }

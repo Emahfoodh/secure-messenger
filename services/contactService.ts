@@ -69,11 +69,11 @@ export const sendContactRequest = async (
     const cleanedData = removeUndefinedFields(requestData);
 
     await setDoc(doc(db, 'contactRequests', requestId), cleanedData);
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to send contact request',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -92,11 +92,11 @@ export const getIncomingRequests = async (userUid: string): Promise<ContactReque
       id: doc.id,
       ...doc.data()
     } as ContactRequest));
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to load incoming requests',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -115,11 +115,11 @@ export const getOutgoingRequests = async (userUid: string): Promise<ContactReque
       id: doc.id,
       ...doc.data()
     } as ContactRequest));
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to load outgoing requests',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -148,11 +148,11 @@ export const checkExistingRequest = async (
     }
     
     return null;
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to check existing request',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -197,14 +197,11 @@ export const acceptContactRequest = async (request: ContactRequest): Promise<voi
         respondedAt: new Date().toISOString()
       })
     ]);
-  } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to accept contact request',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -213,11 +210,11 @@ export const acceptContactRequest = async (request: ContactRequest): Promise<voi
 export const declineContactRequest = async (requestId: string): Promise<void> => {
   try {
     await deleteDoc(doc(db, 'contactRequests', requestId));
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to decline contact request',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -226,11 +223,11 @@ export const declineContactRequest = async (requestId: string): Promise<void> =>
 export const cancelContactRequest = async (requestId: string): Promise<void> => {
   try {
     await deleteDoc(doc(db, 'contactRequests', requestId));
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to cancel contact request',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -274,11 +271,11 @@ export const removeContact = async (currentUserUid: string, contactUid: string):
     if (deletePromises.length > 0) {
       await Promise.all(deletePromises);
     }
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to remove contact',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -289,11 +286,11 @@ export const getContacts = async (userUid: string): Promise<Contact[]> => {
     const querySnapshot = await getDocs(contactsRef);
     
     return querySnapshot.docs.map(doc => doc.data() as Contact);
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to load contacts',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -302,11 +299,11 @@ export const isContact = async (currentUserUid: string, targetUserUid: string): 
   try {
     const contactDoc = await getDoc(doc(db, 'users', currentUserUid, 'contacts', targetUserUid));
     return contactDoc.exists();
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to check contact status',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };

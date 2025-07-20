@@ -31,11 +31,11 @@ export class BiometricService {
         isEnrolled,
         availableTypes,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.BIOMETRIC,
         'Unable to check biometric capabilities',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -136,18 +136,14 @@ export class BiometricService {
         throw new AppError(
           ErrorType.BIOMETRIC,
           errorMessage,
-          result
+          result instanceof AppError ? result : result instanceof Error ? result : new Error(result.error)
         );
       }
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
-      
+    } catch (error: any) {
       throw new AppError(
         ErrorType.BIOMETRIC,
         'An unexpected error occurred during authentication',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -159,11 +155,11 @@ export class BiometricService {
     try {
       const enabled = await AsyncStorage.getItem(this.BIOMETRIC_ENABLED_KEY);
       return enabled === 'true';
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Unable to check biometric settings',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -174,11 +170,11 @@ export class BiometricService {
   static async setBiometricEnabled(enabled: boolean): Promise<void> {
     try {
       await AsyncStorage.setItem(this.BIOMETRIC_ENABLED_KEY, enabled.toString());
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Unable to save biometric settings',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -190,11 +186,11 @@ export class BiometricService {
     try {
       const completed = await AsyncStorage.getItem(this.BIOMETRIC_SETUP_COMPLETED_KEY);
       return completed === 'true';
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Unable to check biometric setup status',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -205,11 +201,11 @@ export class BiometricService {
   static async setBiometricSetupCompleted(completed: boolean): Promise<void> {
     try {
       await AsyncStorage.setItem(this.BIOMETRIC_SETUP_COMPLETED_KEY, completed.toString());
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Unable to save biometric setup status',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }

@@ -47,15 +47,11 @@ export class KeyManagementService {
         publicKey,
         privateKey
       };
-    } catch (error) {
-      if (error instanceof AppError) {
-        console.error('Key generation error:', error);
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to generate user keypair',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -70,14 +66,11 @@ export class KeyManagementService {
         this.USER_PRIVATE_KEY,
         privateKey
       );
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to store private key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -93,14 +86,11 @@ export class KeyManagementService {
         this.USER_PUBLIC_KEY,
         publicKey
       );
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to store public key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -113,11 +103,11 @@ export class KeyManagementService {
     try {
       const privateKey = await SecureStore.getItemAsync(this.USER_PRIVATE_KEY);
       return privateKey !== null;
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to verify private key existence',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -129,11 +119,11 @@ export class KeyManagementService {
     try {
       const key = await SecureStore.getItemAsync(this.USER_PRIVATE_KEY);
       return key || undefined;
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to retrieve private key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -145,11 +135,11 @@ export class KeyManagementService {
     try {
       const key = await SecureStore.getItemAsync(this.USER_PUBLIC_KEY);
       return key || undefined;
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to retrieve public key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -184,11 +174,11 @@ export class KeyManagementService {
       
       // Return Base64 encoded shared secret
       return encodeBase64(sharedKey);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to generate shared secret',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -201,11 +191,11 @@ export class KeyManagementService {
     try {
       const sessionKey = this.getRandomBytes(32);
       return encodeBase64(sessionKey);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to generate session key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -249,14 +239,11 @@ export class KeyManagementService {
 
       // Return as Base64
       return encodeBase64(combined);
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to encrypt session key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -303,11 +290,11 @@ export class KeyManagementService {
 
       // Return as Base64
       return encodeBase64(decryptedKey);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to decrypt session key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }

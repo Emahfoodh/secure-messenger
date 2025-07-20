@@ -34,11 +34,11 @@ export class VideoService {
     try {
       const { status } = await Camera.requestCameraPermissionsAsync();
       return status === 'granted';
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.PERMISSION,
         'Failed to request camera permissions',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -50,11 +50,11 @@ export class VideoService {
     try {
       const { status } = await Camera.requestMicrophonePermissionsAsync();
       return status === 'granted';
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.PERMISSION,
         'Failed to request microphone permissions',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -66,11 +66,11 @@ export class VideoService {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       return status === 'granted';
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.PERMISSION,
         'Failed to request media library permissions',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -117,14 +117,11 @@ export class VideoService {
       await this.validateVideo(video);
 
       return video;
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to record video',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -160,14 +157,11 @@ export class VideoService {
       await this.validateVideo(video);
 
       return video;
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to select video from gallery',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -217,11 +211,11 @@ export class VideoService {
         duration: 0,
         size: fileInfo.size || 0,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to get video information',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -257,14 +251,11 @@ export class VideoService {
       const downloadURL = await getDownloadURL(videoRef);
       
       return downloadURL;
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to upload video',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -304,14 +295,11 @@ export class VideoService {
         height: video.height || 0,
         size: fileSize,
       };
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to process video for chat',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }

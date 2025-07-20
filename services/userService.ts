@@ -23,11 +23,11 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
       return userDoc.data() as UserProfile;
     }
     return null;
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to load user profile',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -35,11 +35,11 @@ export const getUserProfile = async (uid: string): Promise<UserProfile | null> =
 export const updateUserProfile = async (uid: string, updates: Partial<UserProfile>): Promise<void> => {
   try {
     await updateDoc(doc(db, 'users', uid), updates);
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to update user profile',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -61,15 +61,11 @@ export const uploadProfilePicture = async (uid: string, imageUri: string): Promi
     
     const downloadURL = await getDownloadURL(imageRef);
     return downloadURL;
-  } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
-    }
-    
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to upload profile picture',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };
@@ -84,11 +80,11 @@ export const searchUsersByUsername = async (searchTerm: string): Promise<UserPro
     
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map(doc => doc.data() as UserProfile);
-  } catch (error) {
+  } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,
       'Failed to search users',
-      error
+      error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
     );
   }
 };

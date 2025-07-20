@@ -36,11 +36,11 @@ export class EncryptionService {
       // Since digestStringAsync is async, we need a sync version
       // For deterministic key generation, we'll use a different approach
       return this.generateDeterministicKey(combinedIds);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to generate chat encryption key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -68,11 +68,11 @@ export class EncryptionService {
       
       // Convert to hex string for consistency with original API
       return aesjs.utils.hex.fromBytes(keyBytes);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to generate deterministic key',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -133,14 +133,11 @@ export class EncryptionService {
       }
 
       return encryptedHex;
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Encryption failed',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -204,14 +201,11 @@ export class EncryptionService {
       }
 
       return decryptedMessage;
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Decryption failed',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -304,11 +298,11 @@ export class EncryptionService {
     try {
       const metadataString = JSON.stringify(metadata);
       return this.encryptMessage(metadataString, chatKey);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to encrypt metadata',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -320,11 +314,11 @@ export class EncryptionService {
     try {
       const decryptedString = this.decryptMessage(encryptedMetadata, chatKey);
       return JSON.parse(decryptedString);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to decrypt metadata',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -337,11 +331,11 @@ export class EncryptionService {
     try {
       const saltBytes = Crypto.getRandomBytes(16);
       return aesjs.utils.hex.fromBytes(saltBytes);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to generate salt',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -357,11 +351,11 @@ export class EncryptionService {
       
       // Simple key derivation - in production use proper PBKDF2
       return this.generateDeterministicKey(combined);
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to derive key from password',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }

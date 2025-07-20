@@ -141,11 +141,11 @@ export class MessageService {
       // Update message status to sent
       await updateDoc(docRef, { status: 'sent' });
       return docRef.id;
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to send message',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -228,7 +228,7 @@ export class MessageService {
         });
 
         return messageId;
-      } catch (imageError) {
+      } catch (imageError: any) {
         // If image processing fails, create a text message instead
         const failureMessage: Omit<Message, 'id'> = {
           chatId,
@@ -251,14 +251,14 @@ export class MessageService {
         throw new AppError(
           ErrorType.STORAGE,
           'Failed to process image',
-          imageError
+          imageError instanceof AppError ? imageError : imageError instanceof Error ? imageError : new Error(imageError)
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to send image message',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -342,7 +342,7 @@ export class MessageService {
         });
 
         return messageId;
-      } catch (videoError) {
+      } catch (videoError: any) {
         // If video processing fails, create a text message instead
         const failureMessage: Omit<Message, 'id'> = {
           chatId,
@@ -365,14 +365,14 @@ export class MessageService {
         throw new AppError(
           ErrorType.STORAGE,
           'Failed to process video',
-          videoError
+          videoError instanceof AppError ? videoError : videoError instanceof Error ? videoError : new Error(videoError)
         );
       }
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to send video message',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -453,21 +453,20 @@ export class MessageService {
         }));
 
         callback(updatedMessages);
-      }, (error) => {
-        console.error('❌ Error listening to messages:', error);
+      }, (error: any) => {
         throw new AppError(
           ErrorType.STORAGE,
           'Failed to load messages',
-          error
+          error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
         );
       });
 
       return unsubscribe;
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to set up message listener',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -547,11 +546,11 @@ export class MessageService {
         hasMore,
         lastDoc: newLastDoc,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to load older messages',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -613,11 +612,11 @@ export class MessageService {
         imageData: null,
         videoData: null,
       });
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to delete message',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -659,11 +658,11 @@ export class MessageService {
         isEncrypted: shouldEncrypt && !!encryptedContent,
         ...(encryptedContent && { encryptedContent }),
       });
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to edit message',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }

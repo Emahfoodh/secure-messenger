@@ -1,11 +1,11 @@
 // services/imageService.ts
 
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import * as FileSystem from 'expo-file-system';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '@/config/firebaseConfig';
 import { AppError, ErrorType } from '@/services/errorService';
+import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 // Update message types to support images
 export interface ImageData {
@@ -43,11 +43,11 @@ export class ImageService {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       return status === 'granted';
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.PERMISSION,
         'Failed to request camera permissions',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -59,11 +59,11 @@ export class ImageService {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       return status === 'granted';
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.PERMISSION,
         'Failed to request media library permissions',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -94,14 +94,11 @@ export class ImageService {
       }
 
       return result.assets[0];
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to capture image from camera',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -133,14 +130,11 @@ export class ImageService {
       }
 
       return result.assets[0];
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to select image from gallery',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -201,14 +195,11 @@ export class ImageService {
         height: newHeight,
         size: fileSize,
       };
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to compress image',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -244,14 +235,11 @@ export class ImageService {
       const downloadURL = await getDownloadURL(imageRef);
       
       return downloadURL;
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to upload image',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -289,14 +277,11 @@ export class ImageService {
         height: compressedImage.height,
         size: compressedImage.size,
       };
-    } catch (error) {
-      if (error instanceof AppError) {
-        throw error;
-      }
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to process image for chat',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
@@ -321,11 +306,11 @@ export class ImageService {
         width: result.width,
         height: result.height,
       };
-    } catch (error) {
+    } catch (error: any) {
       throw new AppError(
         ErrorType.UNKNOWN,
         'Failed to get image dimensions',
-        error
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
   }
