@@ -1,26 +1,25 @@
 // services/chatService.ts
 
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  getDocs, 
-  updateDoc, 
-  query, 
-  where, 
-  orderBy, 
+import { db } from '@/config/firebaseConfig';
+import { Contact } from '@/services/contactService';
+import { EncryptionService } from '@/services/encryptionService'; // 🔐 NEW
+import { AppError, ErrorType } from '@/services/errorService';
+import { KeyManagementService } from '@/services/keyManagementService'; // 🔐 NEW
+import { getUserProfile, UserProfile } from '@/services/userService';
+import { Chat, ChatListItem, ChatParticipant } from '@/types/messageTypes';
+import {
+  collection,
+  doc,
+  getDoc,
   onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
-  Timestamp,
+  setDoc,
+  updateDoc,
+  where,
   writeBatch
 } from 'firebase/firestore';
-import { db } from '@/config/firebaseConfig';
-import { Chat, ChatListItem, ChatParticipant } from '@/types/messageTypes';
-import { Contact } from '@/services/contactService';
-import { getUserProfile, UserProfile } from '@/services/userService';
-import { AppError, ErrorType } from '@/services/errorService';
-import { EncryptionService } from '@/services/encryptionService'; // 🔐 NEW
 
 export class ChatService {
   /**
@@ -81,6 +80,33 @@ export class ChatService {
         throw new AppError(ErrorType.VALIDATION, 'Contact profile not found');
       }
 
+      // 🔐 For secret chats, generate and encrypt session key
+      let sessionKeys: { [key: string]: string } | undefined;
+      if (isSecretChat) {
+        // Generate random session key
+        const sessionKey = KeyManagementService.generateSessionKey();
+        
+        // Get recipient's public key
+        if (!contactProfile.publicKey) {
+          throw new AppError(
+            ErrorType.ENCRYPTION,
+            'Recipient does not support encrypted chats'
+          );
+        }
+
+        // Encrypt session key for both participants
+        sessionKeys = {
+          [currentUser.uid]: await KeyManagementService.encryptSessionKey(
+            sessionKey,
+            currentUser.publicKey!
+          ),
+          [contact.uid]: await KeyManagementService.encryptSessionKey(
+            sessionKey,
+            contactProfile.publicKey
+          )
+        };
+      }
+
       const participantDetails: ChatParticipant[] = [
         {
           uid: currentUser.uid,
@@ -113,6 +139,7 @@ export class ChatService {
         // 🔐 Encryption settings
         isSecretChat,
         encryptionEnabled: isSecretChat,
+        ...(sessionKeys && { sessionKeys }), // Add session keys if it's a secret chat
       };
 
       // Create chat document

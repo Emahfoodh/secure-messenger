@@ -79,6 +79,10 @@ export interface Chat {
   // 🔐 Encryption settings
   isSecretChat?: boolean; // Whether this is a secret chat with encryption
   encryptionEnabled?: boolean; // Whether encryption is enabled for this chat
+  // 🔐 Session key data (encrypted with each participant's public key)
+  sessionKeys?: {
+    [userId: string]: string; // Encrypted session key for each participant
+  };
 }
 
 export interface ChatParticipant {

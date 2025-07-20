@@ -1,8 +1,9 @@
 // services/keyManagementService.ts
 
 import { AppError, ErrorType } from '@/services/errorService';
+import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
-import { box, randomBytes } from 'tweetnacl';
+import { box } from 'tweetnacl';
 import { decodeBase64, encodeBase64 } from 'tweetnacl-util';
 
 /**
@@ -18,13 +19,21 @@ export class KeyManagementService {
   private static readonly USER_PUBLIC_KEY = 'user_public_key';
   
   /**
+   * Generate secure random bytes using expo-crypto
+   */
+  private static getRandomBytes(length: number): Uint8Array {
+    return Crypto.getRandomBytes(length);
+  }
+
+  /**
    * Generate a new keypair for a user
    * Returns: { publicKey: string, privateKey: string } (Base64 encoded)
    */
   static async generateUserKeyPair(): Promise<{ publicKey: string, privateKey: string }> {
     try {
-      // Generate new keypair using TweetNaCl
-      const keyPair = box.keyPair();
+      // Initialize random seed for TweetNaCl
+      const seed = this.getRandomBytes(32);
+      const keyPair = box.keyPair.fromSecretKey(seed);
       
       // Encode keys to Base64 for storage
       const publicKey = encodeBase64(keyPair.publicKey);
@@ -39,6 +48,10 @@ export class KeyManagementService {
         privateKey
       };
     } catch (error) {
+      if (error instanceof AppError) {
+        console.error('Key generation error:', error);
+        throw error;
+      }
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to generate user keypair',
@@ -55,12 +68,12 @@ export class KeyManagementService {
     try {
       await SecureStore.setItemAsync(
         this.USER_PRIVATE_KEY,
-        privateKey,
-        {
-          requireAuthentication: true
-        }
+        privateKey
       );
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to store private key',
@@ -81,6 +94,9 @@ export class KeyManagementService {
         publicKey
       );
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(
         ErrorType.STORAGE,
         'Failed to store public key',
@@ -183,8 +199,7 @@ export class KeyManagementService {
    */
   static generateSessionKey(): string {
     try {
-      // Generate 32 random bytes for AES-256
-      const sessionKey = randomBytes(32);
+      const sessionKey = this.getRandomBytes(32);
       return encodeBase64(sessionKey);
     } catch (error) {
       throw new AppError(
@@ -216,8 +231,8 @@ export class KeyManagementService {
       const publicKeyBytes = decodeBase64(recipientPublicKey);
       const sessionKeyBytes = decodeBase64(sessionKey);
 
-      // Generate one-time nonce
-      const nonce = randomBytes(box.nonceLength);
+      // Generate one-time nonce using our secure random generator
+      const nonce = this.getRandomBytes(box.nonceLength);
 
       // Encrypt session key
       const encryptedKey = box(
@@ -235,6 +250,9 @@ export class KeyManagementService {
       // Return as Base64
       return encodeBase64(combined);
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       throw new AppError(
         ErrorType.ENCRYPTION,
         'Failed to encrypt session key',

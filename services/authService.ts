@@ -39,6 +39,9 @@ export const signUp = async (
 
     return { success: true, user };
   } catch (error: any) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError(
       ErrorType.AUTH,
       getAuthErrorMessage(error),
