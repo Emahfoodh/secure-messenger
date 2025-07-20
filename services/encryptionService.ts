@@ -1,8 +1,8 @@
 // services/encryptionService.ts
 
-import * as Crypto from 'expo-crypto';
-import * as aesjs from 'aes-js';
 import { AppError, ErrorType } from '@/services/errorService';
+import * as aesjs from 'aes-js';
+import * as Crypto from 'expo-crypto';
 
 /**
  * Expo Go Compatible Encryption Service for Phase 4

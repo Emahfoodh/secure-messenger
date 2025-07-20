@@ -1,11 +1,12 @@
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword,
-  AuthError
-} from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebaseConfig';
 import { AppError, ErrorType } from '@/services/errorService';
+import { KeyManagementService } from '@/services/keyManagementService';
+import {
+  AuthError,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 
 export interface AuthResult {
   success: boolean;
@@ -18,10 +19,14 @@ export const signUp = async (
   username: string
 ): Promise<AuthResult> => {
   try {
+    // Create Firebase auth user
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // Create user profile in Firestore
+    // Generate encryption keys for E2EE
+    const { publicKey } = await KeyManagementService.generateUserKeyPair();
+    
+    // Create user profile in Firestore with public key
     await setDoc(doc(db, 'users', user.uid), {
       uid: user.uid,
       email: user.email,
@@ -29,6 +34,7 @@ export const signUp = async (
       createdAt: new Date().toISOString(),
       profilePicture: null,
       isOnline: false,
+      publicKey, // Store public key in profile
     });
 
     return { success: true, user };
@@ -44,8 +50,15 @@ export const signUp = async (
 export const signIn = async (email: string, password: string): Promise<AuthResult> => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    
+    // Verify private key exists
+    await KeyManagementService.verifyPrivateKeyExists();
+    
     return { success: true, user: userCredential.user };
   } catch (error: any) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     throw new AppError(
       ErrorType.AUTH,
       getAuthErrorMessage(error),

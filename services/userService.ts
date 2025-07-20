@@ -1,7 +1,7 @@
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/config/firebaseConfig';
 import { AppError, ErrorType } from '@/services/errorService';
+import { collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 export interface UserProfile {
   uid: string;
@@ -13,6 +13,7 @@ export interface UserProfile {
   createdAt: string;
   isOnline: boolean;
   lastSeen?: string;
+  publicKey?: string; // Public key for E2EE
 }
 
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
