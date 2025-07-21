@@ -1,32 +1,32 @@
 // app/chat/[id].tsx
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import MessageItem from '@/components/chat/MessageItem';
+import ImagePickerModal from '@/components/media/ImagePickerModal';
+import VideoPickerModal from '@/components/media/VideoPickerModal';
+import { useAuth } from '@/context/AuthContext';
+import { ChatService } from '@/services/chatService';
+import { isContact } from '@/services/contactService';
+import { ErrorService } from '@/services/errorService';
+import { MessageService, MessagesPaginationResult } from '@/services/messageService';
+import { getUserProfile } from '@/services/userService';
+import { Chat, Message } from '@/types/messageTypes';
+import * as ImagePicker from 'expo-image-picker';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
+  Alert,
   FlatList,
-  TextInput,
-  TouchableOpacity,
   Image,
   KeyboardAvoidingView,
   Platform,
-  Alert,
-  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useAuth } from '@/context/AuthContext';
-import { MessageService, MessagesPaginationResult } from '@/services/messageService';
-import { ChatService } from '@/services/chatService';
-import { getUserProfile } from '@/services/userService';
-import { isContact } from '@/services/contactService';
-import { Message, Chat } from '@/types/messageTypes';
-import { ErrorService } from '@/services/errorService';
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
-import ImagePickerModal from '@/components/media/ImagePickerModal';
-import VideoPickerModal from '@/components/media/VideoPickerModal';
-import MessageItem from '@/components/chat/MessageItem';
-import * as ImagePicker from 'expo-image-picker';
 
 export default function ChatScreen() {
   const { id: chatId } = useLocalSearchParams<{ id: string }>();
@@ -190,12 +190,39 @@ export default function ChatScreen() {
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
+      // Create a temporary message to show immediately
+      const tempMessage: Message = {
+        id: `temp_${Date.now()}`, // Temporary ID
+        chatId,
+        senderId: user.uid,
+        senderUsername,
+        senderDisplayName: currentUserProfile?.displayName,
+        senderProfilePicture: currentUserProfile?.profilePicture,
+        content: messageContent,
+        type: 'text',
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+        isEncrypted: chat?.isSecretChat || chat?.encryptionEnabled || false
+      };
+
+      // Add temporary message to the UI
+      setMessages(prevMessages => [tempMessage, ...prevMessages]);
+
       // 🔐 Send message (encryption handled automatically in MessageService)
-      await MessageService.sendMessage(chatId, user.uid, {
+      const messageId = await MessageService.sendMessage(chatId, user.uid, {
         content: messageContent,
         type: 'text',
         // shouldEncrypt is automatically determined by chat type
       });
+
+      // Update the temporary message with the real ID and sent status
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === tempMessage.id 
+            ? { ...msg, id: messageId, status: 'sent' }
+            : msg
+        )
+      );
 
       // 🔐 Include encryption status in last message update
       await Promise.all([
@@ -215,9 +242,12 @@ export default function ChatScreen() {
       ]);
 
     } catch (error) {
+      // Remove the temporary message on error
+      setMessages(prevMessages => 
+        prevMessages.filter(msg => msg.id !== `temp_${Date.now()}`)
+      );
       ErrorService.handleError(error, 'Send Message');
       setInputText(messageContent);
-
     } finally {
       setSending(false);
     }
@@ -241,8 +271,42 @@ export default function ChatScreen() {
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
+      // Create a temporary message to show immediately
+      const tempMessage: Message = {
+        id: `temp_${Date.now()}`, // Temporary ID
+        chatId,
+        senderId: user.uid,
+        senderUsername,
+        senderDisplayName: currentUserProfile?.displayName,
+        senderProfilePicture: currentUserProfile?.profilePicture,
+        content: '',
+        type: 'image',
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+        isEncrypted: chat?.isSecretChat || chat?.encryptionEnabled || false,
+        imageData: {
+          uri: image.uri,
+          width: image.width,
+          height: image.height,
+          size: image.fileSize || 0,
+          downloadURL: image.uri // Use local URI as temporary downloadURL
+        }
+      };
+
+      // Add temporary message to the UI
+      setMessages(prevMessages => [tempMessage, ...prevMessages]);
+
       // Send actual image message (encryption handled automatically)
-      await MessageService.sendImageMessage(chatId, user.uid, image.uri);
+      const messageId = await MessageService.sendImageMessage(chatId, user.uid, image.uri);
+
+      // Update the temporary message with the real ID and sent status
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === tempMessage.id 
+            ? { ...msg, id: messageId, status: 'sent' }
+            : msg
+        )
+      );
 
       // Update last message and unread counts
       await Promise.all([
@@ -262,6 +326,10 @@ export default function ChatScreen() {
       ]);
 
     } catch (error) {
+      // Remove the temporary message on error
+      setMessages(prevMessages => 
+        prevMessages.filter(msg => msg.id !== `temp_${Date.now()}`)
+      );
       ErrorService.handleError(error, 'Send Image');
     } finally {
       setSendingImage(false);
@@ -286,8 +354,43 @@ export default function ChatScreen() {
       const currentUserProfile = await getUserProfile(user.uid);
       const senderUsername = currentUserProfile?.username || user.email || 'User';
 
+      // Create a temporary message to show immediately
+      const tempMessage: Message = {
+        id: `temp_${Date.now()}`, // Temporary ID
+        chatId,
+        senderId: user.uid,
+        senderUsername,
+        senderDisplayName: currentUserProfile?.displayName,
+        senderProfilePicture: currentUserProfile?.profilePicture,
+        content: '',
+        type: 'video',
+        timestamp: new Date().toISOString(),
+        status: 'sending',
+        isEncrypted: chat?.isSecretChat || chat?.encryptionEnabled || false,
+        videoData: {
+          uri: video.uri,
+          width: video.width,
+          height: video.height,
+          size: video.fileSize || 0,
+          duration: video.duration || 0,
+          downloadURL: video.uri // Use local URI as temporary downloadURL
+        }
+      };
+
+      // Add temporary message to the UI
+      setMessages(prevMessages => [tempMessage, ...prevMessages]);
+
       // Send actual video message (encryption handled automatically)
-      await MessageService.sendVideoMessage(chatId, user.uid, video);
+      const messageId = await MessageService.sendVideoMessage(chatId, user.uid, video);
+
+      // Update the temporary message with the real ID and sent status
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg.id === tempMessage.id 
+            ? { ...msg, id: messageId, status: 'sent' }
+            : msg
+        )
+      );
 
       // Update last message and unread counts
       await Promise.all([
@@ -307,6 +410,10 @@ export default function ChatScreen() {
       ]);
 
     } catch (error) {
+      // Remove the temporary message on error
+      setMessages(prevMessages => 
+        prevMessages.filter(msg => msg.id !== `temp_${Date.now()}`)
+      );
       ErrorService.handleError(error, 'Send Video');
     } finally {
       setSendingVideo(false);
