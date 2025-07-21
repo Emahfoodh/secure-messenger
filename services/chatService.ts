@@ -2,9 +2,7 @@
 
 import { db } from '@/config/firebaseConfig';
 import { Contact } from '@/services/contactService';
-import { EncryptionService } from '@/services/encryptionService'; // 🔐 NEW
 import { AppError, ErrorType } from '@/services/errorService';
-import { KeyManagementService } from '@/services/keyManagementService'; // 🔐 NEW
 import { getUserProfile, UserProfile } from '@/services/userService';
 import { Chat, ChatListItem, ChatParticipant } from '@/types/messageTypes';
 import {
@@ -83,28 +81,7 @@ export class ChatService {
       // 🔐 For secret chats, generate and encrypt session key
       let sessionKeys: { [key: string]: string } | undefined;
       if (isSecretChat) {
-        // Generate random session key
-        const sessionKey = KeyManagementService.generateSessionKey();
-        
-        // Get recipient's public key
-        if (!contactProfile.publicKey) {
-          throw new AppError(
-            ErrorType.ENCRYPTION,
-            'Recipient does not support encrypted chats'
-          );
-        }
-
-        // Encrypt session key for both participants
-        sessionKeys = {
-          [currentUser.uid]: await KeyManagementService.encryptSessionKey(
-            sessionKey,
-            currentUser.publicKey!
-          ),
-          [contact.uid]: await KeyManagementService.encryptSessionKey(
-            sessionKey,
-            contactProfile.publicKey
-          )
-        };
+        console.warn("🔐 encryption and decryption will be implemented later");
       }
 
       const participantDetails: ChatParticipant[] = [
@@ -231,16 +208,7 @@ export class ChatService {
           // 🔐 Decrypt last message if it's encrypted
           let lastMessageContent = fullChat.lastMessage?.content;
           if (fullChat.lastMessage?.isEncrypted && lastMessageContent) {
-            try {
-              const chatKey = await EncryptionService.generateChatKey(
-                fullChat.participants[0], 
-                fullChat.participants[1]
-              );
-              lastMessageContent = await EncryptionService.decryptMessage(lastMessageContent, chatKey);
-            } catch (error) {
-              console.error('Failed to decrypt last message preview:', error);
-              lastMessageContent = '🔒 Encrypted message';
-            }
+            console.warn("🔐 encryption and decryption will be implemented later");
           }
 
           const chatListItem: ChatListItem = {
@@ -312,25 +280,7 @@ export class ChatService {
       // 🔐 For encrypted messages, store encrypted content in lastMessage
       let lastMessageContent = content;
       if (isEncrypted) {
-        // Get chat info to determine encryption key
-        const chatDoc = await getDoc(chatRef);
-        if (chatDoc.exists()) {
-          const chatData = chatDoc.data() as Chat;
-          if (chatData.encryptionEnabled) {
-            try {
-              const chatKey = await EncryptionService.generateChatKey(
-                chatData.participants[0], 
-                chatData.participants[1]
-              );
-              lastMessageContent = await EncryptionService.encryptMessage(content, chatKey);
-            } catch (error) {
-              console.error('Failed to encrypt last message:', error);
-              // Fall back to unencrypted if encryption fails
-              lastMessageContent = content;
-              isEncrypted = false;
-            }
-          }
-        }
+        console.warn("🔐 encryption and decryption will be implemented later");
       }
       
       // Update the main chat document

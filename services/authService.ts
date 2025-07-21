@@ -1,6 +1,5 @@
 import { auth, db } from '@/config/firebaseConfig';
 import { AppError, ErrorType } from '@/services/errorService';
-import { KeyManagementService } from '@/services/keyManagementService';
 import {
   AuthError,
   createUserWithEmailAndPassword,
@@ -23,8 +22,7 @@ export const signUp = async (
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
     
-    // Generate encryption keys for E2EE
-    const { publicKey } = await KeyManagementService.generateUserKeyPair();
+    // TODO: Generate encryption keys for E2EE
     
     // Create user profile in Firestore with public key
     await setDoc(doc(db, 'users', user.uid), {
@@ -34,7 +32,7 @@ export const signUp = async (
       createdAt: new Date().toISOString(),
       profilePicture: null,
       isOnline: false,
-      publicKey, // Store public key in profile
+      publicKey: "publicKey", // TODO: Replace with actual public key
     });
 
     return { success: true, user };
@@ -50,10 +48,9 @@ export const signUp = async (
 export const signIn = async (email: string, password: string): Promise<AuthResult> => {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    
-    // Verify private key exists
-    await KeyManagementService.verifyPrivateKeyExists();
-    
+
+    // TODO: Verify private key exists
+
     return { success: true, user: userCredential.user };
   } catch (error: any) {
     throw new AppError(

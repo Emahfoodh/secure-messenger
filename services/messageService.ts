@@ -1,33 +1,32 @@
 // services/messageService.ts
 
+import * as ImagePicker from 'expo-image-picker';
 import {
+  addDoc,
   collection,
   doc,
-  addDoc,
-  updateDoc,
-  setDoc,
-  query,
-  orderBy,
+  DocumentData,
+  arrayUnion as firestoreArrayUnion,
+  getDocs,
   limit,
   onSnapshot,
-  serverTimestamp,
-  getDocs,
-  startAfter,
+  orderBy,
+  query,
   QueryDocumentSnapshot,
-  DocumentData,
+  serverTimestamp,
+  setDoc,
+  startAfter,
+  updateDoc,
   writeBatch,
-  arrayUnion as firestoreArrayUnion,
 } from 'firebase/firestore';
-import * as ImagePicker from 'expo-image-picker';
 
 import { db } from '@/config/firebaseConfig';
-import { Message, SendMessageData } from '@/types/messageTypes';
-import { AppError, ErrorType } from '@/services/errorService';
-import { getUserProfile } from '@/services/userService';
-import { ImageService } from '@/services/imageService';
-import { VideoService } from '@/services/videoService';
-import { EncryptionService } from '@/services/encryptionService';
 import { ChatService } from '@/services/chatService';
+import { AppError, ErrorType } from '@/services/errorService';
+import { ImageService } from '@/services/imageService';
+import { getUserProfile } from '@/services/userService';
+import { VideoService } from '@/services/videoService';
+import { Message, SendMessageData } from '@/types/messageTypes';
 
 export interface MessagesPaginationResult {
   messages: Message[];
@@ -123,33 +122,8 @@ export class MessageService {
     chat: any,
     shouldEncrypt?: boolean
   ): Promise<{ finalContent: string; encryptedContent?: string; isEncrypted: boolean }> {
-    const needsEncryption = chat?.isSecretChat || chat?.encryptionEnabled || shouldEncrypt;
-
-    if (!needsEncryption || !content) {
-      return { finalContent: content, isEncrypted: false };
-    }
-
-    try {
-      const chatKey = await EncryptionService.generateChatKey(
-        chat.participants[0],
-        chat.participants[1]
-      );
-      const encryptedContent = await EncryptionService.encryptMessage(content, chatKey);
-
-      return {
-        finalContent: encryptedContent,
-        encryptedContent,
-        isEncrypted: true,
-      };
-    } catch (error) {
-      console.error('Failed to encrypt message:', error);
-      if (error instanceof AppError) {
-        console.log('🔴 Encryption error:', error.type);
-        console.log('🔴 Encryption error message:', error.originalError);
-      }
-      console.warn('Message sent unencrypted due to encryption failure');
-      return { finalContent: content, isEncrypted: false };
-    }
+    console.warn("🔐 encryption and decryption will be implemented later");
+    return { finalContent: content, isEncrypted: false };
   }
 
   /**
@@ -159,39 +133,12 @@ export class MessageService {
     messages: any[],
     chat: any
   ): Promise<Message[]> {
-    let chatKey: string | null = null;
-
-    if (chat && (chat.isSecretChat || chat.encryptionEnabled)) {
-      try {
-        chatKey = await EncryptionService.generateChatKey(
-          chat.participants[0],
-          chat.participants[1]
-        );
-      } catch (error) {
-        console.error('Failed to generate chat key:', error);
-      }
-    }
-
-    return messages.map(doc => {
-      const data = typeof doc.data === 'function' ? doc.data() : doc;
-      let decryptedContent = data.content;
-
-      if (data.isEncrypted && chatKey && data.content) {
-        try {
-          decryptedContent = EncryptionService.decryptMessage(data.content, chatKey);
-        } catch (error) {
-          console.error('Failed to decrypt message:', error);
-          decryptedContent = this.FAILED_DECRYPT_MESSAGE;
-        }
-      }
-
-      return {
-        id: doc.id,
-        ...data,
-        content: decryptedContent,
-        timestamp: this.convertTimestamp(data.timestamp),
-      } as Message;
-    });
+    console.warn("🔐 decryption will be implemented later");
+    return messages.map(msg => ({
+      ...msg,
+      content: msg.isEncrypted ? this.FAILED_DECRYPT_MESSAGE : msg.content,
+      timestamp: this.convertTimestamp(msg.timestamp),
+    }));
   }
 
   // =====================================
