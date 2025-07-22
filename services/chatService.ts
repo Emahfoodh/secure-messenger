@@ -193,7 +193,6 @@ export class ChatService {
       const unsubscribe = onSnapshot(q, async (snapshot) => {
         const chatPromises = snapshot.docs.map(async (chatDoc) => {
           const fullChat = chatDoc.data() as Chat;
-          
           // Get the other participant details
           const otherParticipantUid = fullChat.participants.find(p => p !== userId);
           if (!otherParticipantUid) return null;
@@ -201,9 +200,9 @@ export class ChatService {
           const otherParticipant = fullChat.participantDetails.find(p => p.uid === otherParticipantUid);
           if (!otherParticipant) return null;
 
+      
           // Get unread count from user's chat subcollection
-          const userChatDoc = await getDoc(doc(db, 'users', userId, 'chats', chatDoc.id));
-          const unreadCount = userChatDoc.exists() ? (userChatDoc.data().unreadCount || 0) : 0;
+          const unreadCount = fullChat.unreadCount?.[userId] || 0;
 
           // 🔐 Decrypt last message if it's encrypted
           let lastMessageContent = fullChat.lastMessage?.content;
@@ -261,7 +260,7 @@ export class ChatService {
   }
 
   /**
-   * Update last message in chat - UPDATED WITH ENCRYPTION SUPPORT
+   * Update last message in chat
    */
   static async updateLastMessage(
     chatId: string,
@@ -269,47 +268,28 @@ export class ChatService {
     senderUsername: string,
     content?: string,
     type: 'text' | 'image' | 'video' | 'file' = 'text',
-    isEncrypted: boolean = false // 🔐 Track if message is encrypted
+    isEncrypted = false
   ): Promise<void> {
     try {
-      // Use a batch to ensure atomicity
-      const batch = writeBatch(db);
-      
       const chatRef = doc(db, 'chats', chatId);
-      
-      // 🔐 For encrypted messages, store encrypted content in lastMessage
-      let lastMessageContent = content;
+
+      const lastMessage = {
+        content,
+        senderId,
+        senderUsername,
+        timestamp: new Date().toISOString(),
+        type,
+        isEncrypted,
+      };
+
       if (isEncrypted) {
         console.warn("🔐 encryption and decryption will be implemented later");
       }
-      
-      // Update the main chat document
-      batch.update(chatRef, {
-        lastMessage: {
-          content: lastMessageContent, // 🔐 May be encrypted
-          senderId,
-          senderUsername,
-          timestamp: new Date().toISOString(),
-          type,
-          isEncrypted, // 🔐 Track encryption status
-        },
+
+      await updateDoc(chatRef, {
+        lastMessage,
         lastActivity: serverTimestamp(),
       });
-
-      // Also update both users' chat subcollections for immediate local updates
-      const chatDoc = await getDoc(chatRef);
-      if (chatDoc.exists()) {
-        const chatData = chatDoc.data() as Chat;
-        
-        for (const participantId of chatData.participants) {
-          const userChatRef = doc(db, 'users', participantId, 'chats', chatId);
-          batch.update(userChatRef, {
-            lastActivity: serverTimestamp(),
-          });
-        }
-      }
-
-      await batch.commit();
     } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
@@ -324,15 +304,18 @@ export class ChatService {
    */
   static async incrementUnreadCount(chatId: string, userId: string): Promise<void> {
     try {
-      const userChatRef = doc(db, 'users', userId, 'chats', chatId);
-      const userChatDoc = await getDoc(userChatRef);
-      
-      if (userChatDoc.exists()) {
-        const currentUnread = userChatDoc.data().unreadCount || 0;
-        await updateDoc(userChatRef, {
-          unreadCount: currentUnread + 1,
-        });
-      }
+      const chatRef = doc(db, 'chats', chatId);
+      const userChatDoc = await getDoc(chatRef);
+
+      // console.log('chat doc:', JSON.stringify(userChatDoc.data(), null, 2));
+      // Print the unreadCount object directly
+      const unreadCount = userChatDoc.data()?.unreadCount || {};
+      const newCount = (unreadCount[userId] || 0) + 1;
+      unreadCount[userId] = newCount;
+
+      await updateDoc(chatRef, {
+        unreadCount,
+      });
     } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
@@ -346,11 +329,16 @@ export class ChatService {
    * Mark chat as read (reset unread count)
    */
   static async markChatAsRead(chatId: string, userId: string): Promise<void> {
+    console.log('Marking chat as read:', chatId, 'for user:', userId);
     try {
-      const userChatRef = doc(db, 'users', userId, 'chats', chatId);
+      const chatRef = doc(db, 'chats', chatId);
+      const userChatDoc = await getDoc(chatRef);
       console.log('Marking chat as read:', chatId, 'for user:', userId);
-      await updateDoc(userChatRef, {
-        unreadCount: 0,
+      const unreadCount = userChatDoc.data()?.unreadCount || {};
+      unreadCount[userId] = 0;
+
+      await updateDoc(chatRef, {
+        unreadCount,
       });
     } catch (error: any) {
       throw new AppError(

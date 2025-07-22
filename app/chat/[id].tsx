@@ -77,8 +77,7 @@ export default function ChatScreen() {
         }
 
         await loadOlderMessages();
-
-        
+        await MessageService.markOtherUsersMessagesAsRead(chatId, user.uid);
       } catch (error) {
         console.error('Error initializing chat:', error);
         ErrorService.handleError(error, 'Load Chat');
@@ -90,7 +89,7 @@ export default function ChatScreen() {
 
     initializeChat();
 
-    console.log('Chat initialized:', chatId, user?.uid);
+    // console.log('Chat initialized:', chatId, user?.uid);
     // TODO: call the message listener
 
 
@@ -224,7 +223,7 @@ export default function ChatScreen() {
       setMessages(prevMessages => [tempMessage, ...prevMessages]);
 
       // 🔐 Send message (encryption handled automatically in MessageService)
-      const messageId = await MessageService.sendMessage(chatId, user.uid, tempMessage as SendMessageData);
+      const messageId = await MessageService.sendMessage(chatId, user.uid, otherParticipant.uid, tempMessage as SendMessageData);
 
       // Update the temporary message with the real ID and sent status
       setMessages(prevMessages => 
@@ -234,24 +233,6 @@ export default function ChatScreen() {
             : msg
         )
       );
-
-      const lastMessageContent = messageContent || (image ? '📷 Photo' : video ? '🎥 Video' : '');
-      // 🔐 Include encryption status in last message update
-      await Promise.all([
-        ChatService.updateLastMessage(
-          chatId, 
-          user.uid, 
-          senderUsername,
-          lastMessageContent, 
-          type,
-          chat?.isSecretChat || chat?.encryptionEnabled || false // Pass encryption status
-        ),
-        chat ? Promise.all(
-          chat.participants.filter(p => p !== user.uid).map(participantId => 
-            ChatService.incrementUnreadCount(chatId, participantId)
-          )
-        ) : Promise.resolve()
-      ]);
 
     } catch (error) {
       // Remove the temporary message on error

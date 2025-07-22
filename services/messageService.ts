@@ -147,6 +147,7 @@ export class MessageService {
   static async sendMessage(
     chatId: string,
     senderId: string,
+    receiverId: string,
     messageData: SendMessageData,
   ): Promise<string> {
     try {
@@ -189,14 +190,17 @@ export class MessageService {
 
       await updateDoc(docRef, { status: 'sent' });
       // 🔐 Update last message in chat with encryption support
+      const lastMessageContent = finalContent || (messageData.type === 'image' ? '📷 Photo' : messageData.type === 'video' ? '🎥 Video' : '');
+
       await ChatService.updateLastMessage(
         chatId,
         senderId,
         baseMessage.senderUsername,
-        finalContent,
+        lastMessageContent,
         messageData.type,
         isEncrypted
       );
+      await ChatService.incrementUnreadCount(chatId, receiverId);
       return docRef.id;
     } catch (error: any) {
       throw new AppError(
@@ -248,6 +252,62 @@ export class MessageService {
   // =====================================
   // MESSAGE MANAGEMENT METHODS
   // =====================================
+
+  /**
+   * Marks all messages from other users as read if they are in 'sent' status
+   * This is typically called when a user opens a chat to mark all unread messages as read
+   */
+  static async markOtherUsersMessagesAsRead(
+    chatId: string,
+    currentUserId: string
+  ): Promise<void> {
+    try {
+      const messagesRef = collection(db, 'chats', chatId, 'messages');
+      
+      // Query for messages with status 'sent' only to avoid composite index requirement
+      // We'll filter out current user's messages in the client
+      const q = query(
+        messagesRef,
+        where('status', '==', 'sent')
+      );
+
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) {
+        return; // No messages to mark as read
+      }
+
+      const batch = writeBatch(db);
+      const messageIds: string[] = [];
+
+      snapshot.docs.forEach(docSnapshot => {
+        const messageData = docSnapshot.data();
+        const readBy = messageData.readBy || [];
+        
+        // Filter out messages from current user and already read messages
+        if (messageData.senderId !== currentUserId && !readBy.includes(currentUserId)) {
+          const messageRef = doc(db, 'chats', chatId, 'messages', docSnapshot.id);
+          batch.update(messageRef, {
+            readBy: firestoreArrayUnion(currentUserId),
+            status: 'read' // Update status to 'read' as well
+          });
+          messageIds.push(docSnapshot.id);
+        }
+      });
+
+      if (messageIds.length > 0) {
+        await batch.commit();
+        // console.log(`Marked ${messageIds.length} messages as read for user ${currentUserId} in chat ${chatId}`);
+      }
+      console.log(`Marked ${messageIds.length} messages as read for user ${currentUserId} in chat ${chatId}`);
+      await ChatService.markChatAsRead(chatId, currentUserId);
+    } catch (error: any) {
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Failed to mark other users\' messages as read',
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
+      );
+    }
+  }
 
   /**
    * Marks multiple messages as read by a user

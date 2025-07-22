@@ -1,19 +1,19 @@
 // app/(tabs)/index.tsx 
 
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Image,
-  RefreshControl,
-} from 'react-native';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'expo-router';
 import { ChatService } from '@/services/chatService';
 import { ChatListItem } from '@/types/messageTypes';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
 interface ChatItemProps {
   item: ChatListItem;
