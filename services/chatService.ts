@@ -329,11 +329,9 @@ export class ChatService {
    * Mark chat as read (reset unread count)
    */
   static async markChatAsRead(chatId: string, userId: string): Promise<void> {
-    console.log('Marking chat as read:', chatId, 'for user:', userId);
     try {
       const chatRef = doc(db, 'chats', chatId);
       const userChatDoc = await getDoc(chatRef);
-      console.log('Marking chat as read:', chatId, 'for user:', userId);
       const unreadCount = userChatDoc.data()?.unreadCount || {};
       unreadCount[userId] = 0;
 

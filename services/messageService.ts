@@ -112,9 +112,8 @@ export class MessageService {
   private static async handleEncryption(
     content: string,
     chat: any,
-    shouldEncrypt?: boolean
   ): Promise<{ finalContent: string; encryptedContent?: string; isEncrypted: boolean }> {
-    if (shouldEncrypt) {
+    if (chat?.encryptionEnabled || chat?.isSecretChat) {
       console.warn("🔐 encryption and decryption will be implemented later");
     }
     return { finalContent: content, isEncrypted: false };
@@ -157,7 +156,6 @@ export class MessageService {
       const { finalContent, encryptedContent, isEncrypted } = await this.handleEncryption(
         messageData.content || '',
         chat,
-        messageData.shouldEncrypt
       );
 
       let processedImage;
@@ -250,6 +248,51 @@ export class MessageService {
   }
 
   // =====================================
+  // MESSAGE LISTENING METHODS
+  // =====================================
+  static listenForMessages(
+    chatId: string,
+    userId: string,
+    callback: (message: Message) => void
+  ): (() => void) {
+    const messagesRef = collection(db, 'chats', chatId, 'messages');
+    const q = query(messagesRef, orderBy('timestamp', 'asc'));
+    
+    let isInitialized = false;
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      if (!isInitialized) {
+        isInitialized = true;
+        return; // Skip initial snapshot
+      }
+
+      const chat = await ChatService.getChatById(chatId);
+      
+      // Process only newly added messages
+      const addedDocs = snapshot.docChanges()
+        .filter(change => change.type === 'added')
+        .map(change => ({ id: change.doc.id, ...change.doc.data() })) as Message[];
+
+      if (addedDocs.length === 0) return;
+      const filteredDocs = addedDocs.filter(doc => doc.senderId !== userId);
+      const decryptedMessages = await this.handleDecryption(
+        filteredDocs,
+        chat
+      );
+
+      decryptedMessages.forEach((message, index) => {
+        callback({
+          ...message,
+          id: addedDocs[index].id
+        });
+      });
+    });
+
+    return unsubscribe;
+  }
+
+
+  // =====================================
   // MESSAGE MANAGEMENT METHODS
   // =====================================
 
@@ -296,9 +339,7 @@ export class MessageService {
 
       if (messageIds.length > 0) {
         await batch.commit();
-        // console.log(`Marked ${messageIds.length} messages as read for user ${currentUserId} in chat ${chatId}`);
       }
-      console.log(`Marked ${messageIds.length} messages as read for user ${currentUserId} in chat ${chatId}`);
       await ChatService.markChatAsRead(chatId, currentUserId);
     } catch (error: any) {
       throw new AppError(

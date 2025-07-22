@@ -91,12 +91,21 @@ export default function ChatScreen() {
 
     // console.log('Chat initialized:', chatId, user?.uid);
     // TODO: call the message listener
+    const unsubscribe = MessageService.listenForMessages(chatId,user.uid, (message) => {
+      setAllMessages(prevMessages => {
+        // Avoid duplicates by checking message ID
+        if (prevMessages.some(msg => msg.id === message.id)) {
+          return prevMessages;
+        }
+        return [message, ...prevMessages].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      });
+    });
 
 
     return () => {
-      // if (unsubscribe) {
-      //   unsubscribe();
-      // }
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, []);
 
