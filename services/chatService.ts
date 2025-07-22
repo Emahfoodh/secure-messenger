@@ -267,7 +267,7 @@ export class ChatService {
     chatId: string,
     senderId: string,
     senderUsername: string,
-    content: string,
+    content?: string,
     type: 'text' | 'image' | 'video' | 'file' = 'text',
     isEncrypted: boolean = false // 🔐 Track if message is encrypted
   ): Promise<void> {
@@ -348,6 +348,7 @@ export class ChatService {
   static async markChatAsRead(chatId: string, userId: string): Promise<void> {
     try {
       const userChatRef = doc(db, 'users', userId, 'chats', chatId);
+      console.log('Marking chat as read:', chatId, 'for user:', userId);
       await updateDoc(userChatRef, {
         unreadCount: 0,
       });

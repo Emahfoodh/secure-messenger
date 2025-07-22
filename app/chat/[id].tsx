@@ -8,8 +8,8 @@ import { ChatService } from '@/services/chatService';
 import { isContact } from '@/services/contactService';
 import { ErrorService } from '@/services/errorService';
 import { MessageService, MessagesPaginationResult } from '@/services/messageService';
-import { getUserProfile } from '@/services/userService';
-import { Chat, Message } from '@/types/messageTypes';
+import { getUserProfile, UserProfile } from '@/services/userService';
+import { Chat, Message, SendMessageData } from '@/types/messageTypes';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
@@ -44,7 +44,11 @@ export default function ChatScreen() {
   const [showVideoPicker, setShowVideoPicker] = useState(false);
   const [sendingImage, setSendingImage] = useState(false);
   const [sendingVideo, setSendingVideo] = useState(false);
-  
+
+  // user and other participant details
+  const [otherParticipant, setOtherParticipant] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
   // Pagination states
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
@@ -53,87 +57,80 @@ export default function ChatScreen() {
   
   const flatListRef = useRef<FlatList>(null);
 
-  // Load initial messages and set up real-time listener
+  // Main initialization effect
   useEffect(() => {
     if (!chatId || !user) return;
     
-    loadChatDetails();
-    checkContactStatus();
-
-    // Listen to recent messages only (for real-time updates)
-    const unsubscribe = MessageService.listenToRecentMessages(
-      chatId,
-      user.uid,
-      (recentMessages) => {
+    const initializeChat = async () => {
+      try {
+        // First load chat details
+        const chatData = await ChatService.getChatById(chatId);
+        setChat(chatData);
         
-        setAllMessages(prevMessages => {
-          const messageIds = new Set(recentMessages.map(m => m.id));
-          const olderMessages = prevMessages.filter(m => !messageIds.has(m.id));
-          
-          // For inverted list, we want newest messages first
-          const allSorted = [...recentMessages, ...olderMessages].sort(
-            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          );
-          
-          return allSorted;
-        });
-        
-        setLoading(false);
-        
-        // Mark chat as read when messages are loaded
-        if (isContactValid) {
-          ChatService.markChatAsRead(chatId, user.uid);
+        // Then check contact status
+        if (chatData) {
+          await checkContactStatusWithData(chatData);
         }
-      }
-    );
+        const userProfileData = await getUserProfile(user.uid);
+        if (userProfileData) {
+          setUserProfile(userProfileData);
+        }
 
-    return unsubscribe;
-  }, [chatId, user]);
+        await loadOlderMessages();
+
+        
+      } catch (error) {
+        console.error('Error initializing chat:', error);
+        ErrorService.handleError(error, 'Load Chat');
+      } finally {
+        // Always set loading to false, even if there's an error
+        setLoading(false);
+      }
+    };
+
+    initializeChat();
+
+    console.log('Chat initialized:', chatId, user?.uid);
+    // TODO: call the message listener
+
+
+    return () => {
+      // if (unsubscribe) {
+      //   unsubscribe();
+      // }
+    };
+  }, []);
 
   // Update displayed messages when allMessages changes
   useEffect(() => {
     setMessages(allMessages);
   }, [allMessages]);
 
-  const loadChatDetails = async () => {
-    if (!chatId) return;
-    
-    try {
-      const chatData = await ChatService.getChatById(chatId);
-      setChat(chatData);
-    } catch (error) {
-      ErrorService.handleError(error, 'Load Chat');
-    }
-  };
-
-  const checkContactStatus = async () => {
-    if (!chatId || !user || !chat) return;
+  // Separate function to check contact status with chat data
+  const checkContactStatusWithData = async (chatData: Chat) => {
+    if (!user) return;
     
     setCheckingContact(true);
     try {
-      const otherParticipant = getOtherParticipant();
+      const otherParticipant = chatData.participantDetails.find(p => p.uid !== user.uid);
       if (!otherParticipant) {
+        console.log('No other participant found');
         setIsContactValid(false);
         return;
       }
+      setOtherParticipant(otherParticipant);
 
       const stillContacts = await isContact(user.uid, otherParticipant.uid);
       setIsContactValid(stillContacts);
     } catch (error) {
       console.error('Error checking contact status:', error);
-      setIsContactValid(true);
+      setIsContactValid(true); // Default to true on error
     } finally {
       setCheckingContact(false);
     }
   };
 
-  useEffect(() => {
-    if (chat) {
-      checkContactStatus();
-    }
-  }, [chat]);
-
-  // Load older messages when user scrolls to bottom (in inverted list)
+    // Load older messages when user scrolls to bottom (in inverted list)
   const loadOlderMessages = useCallback(async () => {
     if (!chatId || !hasMoreMessages || loadingOlderMessages) return;
 
@@ -147,16 +144,9 @@ export default function ChatScreen() {
 
       if (result.messages.length > 0) {
         setAllMessages(prevMessages => {
-          // Add older messages to the end (they'll appear at bottom in inverted list)
-          const messageIds = new Set(prevMessages.map(m => m.id));
-          const newOlderMessages = result.messages.filter(m => !messageIds.has(m.id));
-          
-          // Sort older messages and add to end
-          const sortedOlderMessages = newOlderMessages.sort(
-            (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          );
-          
-          return [...prevMessages, ...sortedOlderMessages];
+          const newMessages = [...result.messages, ...prevMessages];
+          // Sort messages by timestamp to maintain order
+            return newMessages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         });
         
         setLastDoc(result.lastDoc);
@@ -168,11 +158,16 @@ export default function ChatScreen() {
     } finally {
       setLoadingOlderMessages(false);
     }
-  }, [chatId, lastDoc, hasMoreMessages, loadingOlderMessages]);
+  }, [chatId, lastDoc, hasMoreMessages, loadingOlderMessages])
 
   const sendMessage = async () => {
     if (!inputText.trim() || !user || !chatId || sending) return;
-
+    const messageContent = inputText.trim();
+    setInputText('');
+    await sendMessageToServer('text', messageContent)
+  }
+  const sendMessageToServer = async (type: 'text' | 'image' | 'video', messageContent?: string, image?: ImagePicker.ImagePickerAsset, video?: ImagePicker.ImagePickerAsset) => {
+    if (!user || !chatId || sending || sendingImage || sendingVideo) return;
     if (!isContactValid) {
       Alert.alert(
         'Cannot Send Message',
@@ -181,57 +176,74 @@ export default function ChatScreen() {
       );
       return;
     }
-
-    const messageContent = inputText.trim();
-    setInputText('');
     setSending(true);
 
+    let tempId: string;
     try {
-      const currentUserProfile = await getUserProfile(user.uid);
-      const senderUsername = currentUserProfile?.username || user.email || 'User';
-
+      const senderUsername = userProfile?.username || user.email || 'User';
       // Create a temporary message to show immediately
+      tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const tempMessage: Message = {
-        id: `temp_${Date.now()}`, // Temporary ID
+        id: tempId, // More unique temporary ID
         chatId,
         senderId: user.uid,
         senderUsername,
-        senderDisplayName: currentUserProfile?.displayName,
-        senderProfilePicture: currentUserProfile?.profilePicture,
-        content: messageContent,
-        type: 'text',
+        ...(messageContent ? { content: messageContent } : {}),
+        type,
         timestamp: new Date().toISOString(),
         status: 'sending',
-        isEncrypted: chat?.isSecretChat || chat?.encryptionEnabled || false
+        isEncrypted: chat?.isSecretChat || chat?.encryptionEnabled || false,
+        ...(image
+          ? {
+              imageData: {
+                uri: image.uri,
+                width: image.width,
+                height: image.height,
+                size: image.fileSize || 0,
+                downloadURL: image.uri,
+              }
+            }
+          : {}
+        ),
+        ...(video
+          ? {
+              videoData: {
+                uri: video.uri,
+                width: video.width,
+                height: video.height,
+                size: video.fileSize || 0,
+                duration: video.duration || 0,
+                downloadURL: video.uri, // Use local URI as temporary downloadURL
+              }
+            }
+          : {}
+        ),
       };
 
       // Add temporary message to the UI
       setMessages(prevMessages => [tempMessage, ...prevMessages]);
 
       // 🔐 Send message (encryption handled automatically in MessageService)
-      const messageId = await MessageService.sendMessage(chatId, user.uid, {
-        content: messageContent,
-        type: 'text',
-        // shouldEncrypt is automatically determined by chat type
-      });
+      const messageId = await MessageService.sendMessage(chatId, user.uid, tempMessage as SendMessageData);
 
       // Update the temporary message with the real ID and sent status
       setMessages(prevMessages => 
         prevMessages.map(msg => 
-          msg.id === tempMessage.id 
+          msg.id === tempId 
             ? { ...msg, id: messageId, status: 'sent' }
             : msg
         )
       );
 
+      const lastMessageContent = messageContent || (image ? '📷 Photo' : video ? '🎥 Video' : '');
       // 🔐 Include encryption status in last message update
       await Promise.all([
         ChatService.updateLastMessage(
           chatId, 
           user.uid, 
-          senderUsername, 
-          messageContent, 
-          'text',
+          senderUsername,
+          lastMessageContent, 
+          type,
           chat?.isSecretChat || chat?.encryptionEnabled || false // Pass encryption status
         ),
         chat ? Promise.all(
@@ -244,199 +256,52 @@ export default function ChatScreen() {
     } catch (error) {
       // Remove the temporary message on error
       setMessages(prevMessages => 
-        prevMessages.filter(msg => msg.id !== `temp_${Date.now()}`)
+        prevMessages.filter(msg => msg.id !== tempId)
       );
       ErrorService.handleError(error, 'Send Message');
-      setInputText(messageContent);
+      if (messageContent) {
+        setInputText(messageContent);
+      }
     } finally {
+      setSendingImage(false);
+      setSendingVideo(false);
       setSending(false);
     }
   };
 
   const handleImageSelected = async (image: ImagePicker.ImagePickerAsset) => {
     if (!user || !chatId || sendingImage) return;
-
-    if (!isContactValid) {
-      Alert.alert(
-        'Cannot Send Image',
-        'You can only send images to your contacts. This person is no longer in your contacts list.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
     setSendingImage(true);
-    
-    try {
-      const currentUserProfile = await getUserProfile(user.uid);
-      const senderUsername = currentUserProfile?.username || user.email || 'User';
-
-      // Create a temporary message to show immediately
-      const tempMessage: Message = {
-        id: `temp_${Date.now()}`, // Temporary ID
-        chatId,
-        senderId: user.uid,
-        senderUsername,
-        senderDisplayName: currentUserProfile?.displayName,
-        senderProfilePicture: currentUserProfile?.profilePicture,
-        content: '',
-        type: 'image',
-        timestamp: new Date().toISOString(),
-        status: 'sending',
-        isEncrypted: chat?.isSecretChat || chat?.encryptionEnabled || false,
-        imageData: {
-          uri: image.uri,
-          width: image.width,
-          height: image.height,
-          size: image.fileSize || 0,
-          downloadURL: image.uri // Use local URI as temporary downloadURL
-        }
-      };
-
-      // Add temporary message to the UI
-      setMessages(prevMessages => [tempMessage, ...prevMessages]);
-
-      // Send actual image message (encryption handled automatically)
-      const messageId = await MessageService.sendImageMessage(chatId, user.uid, image.uri);
-
-      // Update the temporary message with the real ID and sent status
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.id === tempMessage.id 
-            ? { ...msg, id: messageId, status: 'sent' }
-            : msg
-        )
-      );
-
-      // Update last message and unread counts
-      await Promise.all([
-        ChatService.updateLastMessage(
-          chatId, 
-          user.uid, 
-          senderUsername, 
-          '📷 Photo', 
-          'image',
-          chat?.isSecretChat || chat?.encryptionEnabled || false
-        ),
-        chat ? Promise.all(
-          chat.participants.filter(p => p !== user.uid).map(participantId => 
-            ChatService.incrementUnreadCount(chatId, participantId)
-          )
-        ) : Promise.resolve()
-      ]);
-
-    } catch (error) {
-      // Remove the temporary message on error
-      setMessages(prevMessages => 
-        prevMessages.filter(msg => msg.id !== `temp_${Date.now()}`)
-      );
-      ErrorService.handleError(error, 'Send Image');
-    } finally {
-      setSendingImage(false);
-    }
+    await sendMessageToServer('image', undefined, image);
+    setSendingImage(false);
   };
 
   const handleVideoSelected = async (video: ImagePicker.ImagePickerAsset) => {
     if (!user || !chatId || sendingVideo) return;
-
-    if (!isContactValid) {
-      Alert.alert(
-        'Cannot Send Video',
-        'You can only send videos to your contacts. This person is no longer in your contacts list.',
-        [{ text: 'OK' }]
-      );
-      return;
-    }
-
     setSendingVideo(true);
-    
-    try {
-      const currentUserProfile = await getUserProfile(user.uid);
-      const senderUsername = currentUserProfile?.username || user.email || 'User';
-
-      // Create a temporary message to show immediately
-      const tempMessage: Message = {
-        id: `temp_${Date.now()}`, // Temporary ID
-        chatId,
-        senderId: user.uid,
-        senderUsername,
-        senderDisplayName: currentUserProfile?.displayName,
-        senderProfilePicture: currentUserProfile?.profilePicture,
-        content: '',
-        type: 'video',
-        timestamp: new Date().toISOString(),
-        status: 'sending',
-        isEncrypted: chat?.isSecretChat || chat?.encryptionEnabled || false,
-        videoData: {
-          uri: video.uri,
-          width: video.width,
-          height: video.height,
-          size: video.fileSize || 0,
-          duration: video.duration || 0,
-          downloadURL: video.uri // Use local URI as temporary downloadURL
-        }
-      };
-
-      // Add temporary message to the UI
-      setMessages(prevMessages => [tempMessage, ...prevMessages]);
-
-      // Send actual video message (encryption handled automatically)
-      const messageId = await MessageService.sendVideoMessage(chatId, user.uid, video);
-
-      // Update the temporary message with the real ID and sent status
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.id === tempMessage.id 
-            ? { ...msg, id: messageId, status: 'sent' }
-            : msg
-        )
-      );
-
-      // Update last message and unread counts
-      await Promise.all([
-        ChatService.updateLastMessage(
-          chatId, 
-          user.uid, 
-          senderUsername, 
-          '🎥 Video', 
-          'video',
-          chat?.isSecretChat || chat?.encryptionEnabled || false
-        ),
-        chat ? Promise.all(
-          chat.participants.filter(p => p !== user.uid).map(participantId => 
-            ChatService.incrementUnreadCount(chatId, participantId)
-          )
-        ) : Promise.resolve()
-      ]);
-
-    } catch (error) {
-      // Remove the temporary message on error
-      setMessages(prevMessages => 
-        prevMessages.filter(msg => msg.id !== `temp_${Date.now()}`)
-      );
-      ErrorService.handleError(error, 'Send Video');
-    } finally {
-      setSendingVideo(false);
-    }
+    await sendMessageToServer('video', undefined, undefined, video);
+    setSendingVideo(false);
   };
 
   // Optimized render function with keyExtractor
   const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isOwnMessage = item.senderId === user?.uid;
-    const nextMessage = index < messages.length - 1 ? messages[index + 1] : null;
-    const showSender = !nextMessage || nextMessage.senderId !== item.senderId;
 
     return (
       <MessageItem
         message={item}
         isOwnMessage={isOwnMessage}
-        showSender={showSender}
       />
     );
   }, [messages, user]);
 
-  // Optimized key extractor
-  const keyExtractor = useCallback((item: Message) => item.id, []);
+  // Optimized key extractor with fallback
+  const keyExtractor = useCallback((item: Message, index: number) => {
+    // Ensure we always have a unique key
+    return item.id || `message-${index}-${item.timestamp}`;
+  }, []);
+
+  
 
   // Handle reaching end (which is bottom in inverted list) for pagination
   const handleEndReached = useCallback(() => {
@@ -445,12 +310,7 @@ export default function ChatScreen() {
     }
   }, [hasMoreMessages, loadingOlderMessages, loadOlderMessages]);
 
-  const getOtherParticipant = () => {
-    if (!chat || !user) return null;
-    return chat.participantDetails.find(p => p.uid !== user.uid);
-  };
 
-  const otherParticipant = getOtherParticipant();
 
   // 🔐 Get encryption status info
   const getEncryptionInfo = () => {

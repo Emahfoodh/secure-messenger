@@ -264,17 +264,10 @@ export class VideoService {
    * Process video for chat: validate and upload
    */
   static async processVideoForChat(
-    video: ImagePicker.ImagePickerAsset,
+    video: VideoData,
     chatId: string,
     messageId: string
-  ): Promise<{
-    localUri: string;
-    downloadURL: string;
-    duration: number;
-    width: number;
-    height: number;
-    size: number;
-  }> {
+  ): Promise<VideoData> {
     try {
       // Step 1: Get file size
       const fileInfo = await FileSystem.getInfoAsync(video.uri);
@@ -288,7 +281,7 @@ export class VideoService {
       );
       
       return {
-        localUri: video.uri,
+        uri: video.uri,
         downloadURL,
         duration: (video.duration || 0) / 1000, // Convert to seconds
         width: video.width || 0,

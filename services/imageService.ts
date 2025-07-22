@@ -6,15 +6,7 @@ import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-
-// Update message types to support images
-export interface ImageData {
-  uri: string;
-  downloadURL: string;
-  width: number;
-  height: number;
-  size: number;
-}
+import { ImageData } from '@/types/messageTypes';
 
 export interface ImagePickerOptions {
   allowsEditing?: boolean;
@@ -251,13 +243,7 @@ export class ImageService {
     imageUri: string,
     chatId: string,
     messageId: string
-  ): Promise<{
-    localUri: string;
-    downloadURL: string;
-    width: number;
-    height: number;
-    size: number;
-  }> {
+  ): Promise<ImageData> {
     try {
       
       // Step 1: Compress the image
@@ -271,7 +257,7 @@ export class ImageService {
       );
       
       return {
-        localUri: compressedImage.uri,
+        uri: compressedImage.uri,
         downloadURL,
         width: compressedImage.width,
         height: compressedImage.height,

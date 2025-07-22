@@ -19,10 +19,10 @@ export interface UserProfile {
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   try {
     const userDoc = await getDoc(doc(db, 'users', uid));
-    if (userDoc.exists()) {
-      return userDoc.data() as UserProfile;
+    if (!userDoc.exists()) {
+      throw new AppError(ErrorType.STORAGE, 'User profile not found');
     }
-    return null;
+    return userDoc.data() as UserProfile;
   } catch (error: any) {
     throw new AppError(
       ErrorType.STORAGE,

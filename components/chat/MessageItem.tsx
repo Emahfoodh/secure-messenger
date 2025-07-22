@@ -5,7 +5,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
 } from 'react-native';
 import { Message } from '@/types/messageTypes';
 import ImageMessage from '@/components/media/ImageMessage';
@@ -14,10 +13,9 @@ import VideoMessage from '@/components/media/VideoMessage';
 interface MessageItemProps {
   message: Message;
   isOwnMessage: boolean;
-  showSender: boolean;
 }
 
-const MessageItem: React.FC<MessageItemProps> = memo(({ message, isOwnMessage, showSender }) => {
+const MessageItem: React.FC<MessageItemProps> = memo(({ message, isOwnMessage }) => {
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('en-US', { 
@@ -63,20 +61,7 @@ const MessageItem: React.FC<MessageItemProps> = memo(({ message, isOwnMessage, s
         styles.messageContainer,
         isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
       ]}>
-        {!isOwnMessage && showSender && message.senderProfilePicture && (
-          <Image 
-            source={{ uri: message.senderProfilePicture }} 
-            style={styles.senderAvatar} 
-          />
-        )}
-        
         <View style={styles.videoMessageWrapper}>
-          {!isOwnMessage && showSender && (
-            <Text style={styles.senderName}>
-              {message.senderDisplayName || message.senderUsername}
-            </Text>
-          )}
-          
           <VideoMessage
             videoData={message.videoData}
             isOwnMessage={isOwnMessage}
@@ -110,20 +95,7 @@ const MessageItem: React.FC<MessageItemProps> = memo(({ message, isOwnMessage, s
         styles.messageContainer,
         isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
       ]}>
-        {!isOwnMessage && showSender && message.senderProfilePicture && (
-          <Image 
-            source={{ uri: message.senderProfilePicture }} 
-            style={styles.senderAvatar} 
-          />
-        )}
-        
         <View style={styles.imageMessageWrapper}>
-          {!isOwnMessage && showSender && (
-            <Text style={styles.senderName}>
-              {message.senderDisplayName || message.senderUsername}
-            </Text>
-          )}
-          
           <ImageMessage
             imageData={message.imageData}
             isOwnMessage={isOwnMessage}
@@ -156,23 +128,10 @@ const MessageItem: React.FC<MessageItemProps> = memo(({ message, isOwnMessage, s
       styles.messageContainer,
       isOwnMessage ? styles.ownMessageContainer : styles.otherMessageContainer
     ]}>
-      {!isOwnMessage && showSender && message.senderProfilePicture && (
-        <Image 
-          source={{ uri: message.senderProfilePicture }} 
-          style={styles.senderAvatar} 
-        />
-      )}
-      
       <View style={[
         styles.messageBubble,
         isOwnMessage ? styles.ownMessageBubble : styles.otherMessageBubble
       ]}>
-        {!isOwnMessage && showSender && (
-          <Text style={styles.senderName}>
-            {message.senderDisplayName || message.senderUsername}
-          </Text>
-        )}
-        
         <Text style={[
           styles.messageText,
           isOwnMessage ? styles.ownMessageText : styles.otherMessageText
@@ -209,8 +168,7 @@ const MessageItem: React.FC<MessageItemProps> = memo(({ message, isOwnMessage, s
     prevProps.message.status === nextProps.message.status &&
     prevProps.message.content === nextProps.message.content &&
     prevProps.message.editedAt === nextProps.message.editedAt &&
-    prevProps.isOwnMessage === nextProps.isOwnMessage &&
-    prevProps.showSender === nextProps.showSender
+    prevProps.isOwnMessage === nextProps.isOwnMessage
   );
 });
 
@@ -228,13 +186,6 @@ const styles = StyleSheet.create({
   otherMessageContainer: {
     justifyContent: 'flex-start',
   },
-  senderAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
-    alignSelf: 'flex-end',
-  },
   messageBubble: {
     maxWidth: '75%',
     paddingHorizontal: 12,
@@ -249,12 +200,6 @@ const styles = StyleSheet.create({
   otherMessageBubble: {
     backgroundColor: '#f0f0f0',
     borderBottomLeftRadius: 4,
-  },
-  senderName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#666',
-    marginBottom: 2,
   },
   messageText: {
     fontSize: 16,

@@ -1,4 +1,5 @@
 // types/messageTypes.ts
+import * as ImagePicker from 'expo-image-picker';
 
 export interface ImageData {
   uri: string;
@@ -23,9 +24,7 @@ export interface Message {
   chatId: string;
   senderId: string;
   senderUsername: string;
-  senderDisplayName?: string;
-  senderProfilePicture?: string;
-  content: string;
+  content?: string;
   type: 'text' | 'image' | 'video' | 'file' | 'deleted';
   timestamp: string;
   status: 'sending' | 'sent' | 'read';

@@ -16,7 +16,9 @@ import {
   serverTimestamp,
   setDoc,
   startAfter,
+  Timestamp,
   updateDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore';
 
@@ -26,7 +28,7 @@ import { AppError, ErrorType } from '@/services/errorService';
 import { ImageService } from '@/services/imageService';
 import { getUserProfile } from '@/services/userService';
 import { VideoService } from '@/services/videoService';
-import { Message, SendMessageData } from '@/types/messageTypes';
+import { Chat, Message, SendMessageData } from '@/types/messageTypes';
 
 export interface MessagesPaginationResult {
   messages: Message[];
@@ -69,16 +71,6 @@ export class MessageService {
     return new Date().toISOString();
   }
 
-  /**
-   * Calculates message status based on readBy array
-   */
-  private static calculateMessageStatus(message: Message, currentUserId: string): 'sent' | 'read' {
-    if (message.senderId === currentUserId) {
-      const othersWhoRead = (message.readBy || []).filter(uid => uid !== currentUserId);
-      return othersWhoRead.length > 0 ? 'read' : 'sent';
-    }
-    return 'sent';
-  }
 
   /**
    * Creates base message object with sender information
@@ -122,7 +114,9 @@ export class MessageService {
     chat: any,
     shouldEncrypt?: boolean
   ): Promise<{ finalContent: string; encryptedContent?: string; isEncrypted: boolean }> {
-    console.warn("🔐 encryption and decryption will be implemented later");
+    if (shouldEncrypt) {
+      console.warn("🔐 encryption and decryption will be implemented later");
+    }
     return { finalContent: content, isEncrypted: false };
   }
 
@@ -131,9 +125,11 @@ export class MessageService {
    */
   private static async handleDecryption(
     messages: any[],
-    chat: any
+    chat: Chat | null
   ): Promise<Message[]> {
-    console.warn("🔐 decryption will be implemented later");
+    if (chat?.encryptionEnabled || chat?.isSecretChat) {
+      console.warn("🔐 decryption will be implemented later");
+    }
     return messages.map(msg => ({
       ...msg,
       content: msg.isEncrypted ? this.FAILED_DECRYPT_MESSAGE : msg.content,
@@ -151,7 +147,7 @@ export class MessageService {
   static async sendMessage(
     chatId: string,
     senderId: string,
-    messageData: SendMessageData
+    messageData: SendMessageData,
   ): Promise<string> {
     try {
       const chat = await ChatService.getChatById(chatId);
@@ -163,11 +159,25 @@ export class MessageService {
         messageData.shouldEncrypt
       );
 
+      let processedImage;
+      if (messageData.type === 'image' && messageData.imageData) {
+        const messageId = ImageService.generateImageMessageId();
+        processedImage = await ImageService.processImageForChat(messageData.imageData.uri, chatId, messageId);
+      }
+
+      let processedVideo;
+      if (messageData.type === 'video' && messageData.videoData) {
+        const messageId = VideoService.generateVideoMessageId();
+        processedVideo = await VideoService.processVideoForChat(messageData.videoData, chatId, messageId);
+      }
+
       const message: Omit<Message, 'id'> = {
         ...baseMessage,
         content: finalContent,
         isEncrypted,
         ...(encryptedContent && { encryptedContent }),
+        ...(messageData.type === 'image' && processedImage && { imageData: processedImage }),
+        ...(messageData.type === 'video' && processedVideo && { videoData: processedVideo }),
       };
 
       const messagesRef = collection(db, 'chats', chatId, 'messages');
@@ -176,7 +186,17 @@ export class MessageService {
         timestamp: serverTimestamp(),
       });
 
+
       await updateDoc(docRef, { status: 'sent' });
+      // 🔐 Update last message in chat with encryption support
+      await ChatService.updateLastMessage(
+        chatId,
+        senderId,
+        baseMessage.senderUsername,
+        finalContent,
+        messageData.type,
+        isEncrypted
+      );
       return docRef.id;
     } catch (error: any) {
       throw new AppError(
@@ -186,220 +206,9 @@ export class MessageService {
       );
     }
   }
-
-  /**
-   * Sends an image message with processing
-   */
-  static async sendImageMessage(
-    chatId: string,
-    senderId: string,
-    imageUri: string,
-    caption: string = ''
-  ): Promise<string> {
-    try {
-      const chat = await ChatService.getChatById(chatId);
-      const messageId = ImageService.generateImageMessageId();
-
-      try {
-        const processedImage = await ImageService.processImageForChat(imageUri, chatId, messageId);
-        const baseMessage = await this.createBaseMessage(chatId, senderId, { type: 'image' });
-
-        const { finalContent, encryptedContent, isEncrypted } = await this.handleEncryption(
-          caption,
-          chat
-        );
-
-        const message: Omit<Message, 'id'> = {
-          ...baseMessage,
-          content: finalContent,
-          type: 'image',
-          status: 'sent',
-          isEncrypted,
-          ...(encryptedContent && { encryptedContent }),
-          imageData: {
-            uri: processedImage.localUri,
-            downloadURL: processedImage.downloadURL,
-            width: processedImage.width,
-            height: processedImage.height,
-            size: processedImage.size,
-          },
-        };
-
-        const messagesRef = collection(db, 'chats', chatId, 'messages');
-        await setDoc(doc(messagesRef, messageId), {
-          ...message,
-          timestamp: serverTimestamp(),
-        });
-
-        return messageId;
-      } catch (imageError: any) {
-        // Fallback to failure message
-        await this.sendFailureMessage(chatId, senderId, this.IMAGE_UPLOAD_FAILED_MESSAGE);
-        throw new AppError(
-          ErrorType.STORAGE,
-          'Failed to process image',
-          imageError instanceof AppError ? imageError : imageError instanceof Error ? imageError : new Error(imageError)
-        );
-      }
-    } catch (error: any) {
-      throw new AppError(
-        ErrorType.STORAGE,
-        'Failed to send image message',
-        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
-      );
-    }
-  }
-
-  /**
-   * Sends a video message with processing
-   */
-  static async sendVideoMessage(
-    chatId: string,
-    senderId: string,
-    video: ImagePicker.ImagePickerAsset,
-    caption: string = ''
-  ): Promise<string> {
-    try {
-      const chat = await ChatService.getChatById(chatId);
-      const messageId = VideoService.generateVideoMessageId();
-
-      try {
-        const processedVideo = await VideoService.processVideoForChat(video, chatId, messageId);
-        const baseMessage = await this.createBaseMessage(chatId, senderId, { type: 'video' });
-
-        const { finalContent, encryptedContent, isEncrypted } = await this.handleEncryption(
-          caption,
-          chat
-        );
-
-        const message: Omit<Message, 'id'> = {
-          ...baseMessage,
-          content: finalContent,
-          type: 'video',
-          status: 'sent',
-          isEncrypted,
-          ...(encryptedContent && { encryptedContent }),
-          videoData: {
-            uri: processedVideo.localUri,
-            downloadURL: processedVideo.downloadURL,
-            duration: processedVideo.duration,
-            width: processedVideo.width,
-            height: processedVideo.height,
-            size: processedVideo.size,
-          },
-        };
-
-        const messagesRef = collection(db, 'chats', chatId, 'messages');
-        await setDoc(doc(messagesRef, messageId), {
-          ...message,
-          timestamp: serverTimestamp(),
-        });
-
-        return messageId;
-      } catch (videoError: any) {
-        // Fallback to failure message
-        await this.sendFailureMessage(chatId, senderId, this.VIDEO_UPLOAD_FAILED_MESSAGE);
-        throw new AppError(
-          ErrorType.STORAGE,
-          'Failed to process video',
-          videoError instanceof AppError ? videoError : videoError instanceof Error ? videoError : new Error(videoError)
-        );
-      }
-    } catch (error: any) {
-      throw new AppError(
-        ErrorType.STORAGE,
-        'Failed to send video message',
-        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
-      );
-    }
-  }
-
-  /**
-   * Sends a failure message when media processing fails
-   */
-  private static async sendFailureMessage(
-    chatId: string,
-    senderId: string,
-    content: string
-  ): Promise<void> {
-    try {
-      const baseMessage = await this.createBaseMessage(chatId, senderId, { content, type: 'text' });
-      const failureMessage: Omit<Message, 'id'> = {
-        ...baseMessage,
-        content,
-        type: 'text',
-        status: 'sent',
-      };
-
-      const messagesRef = collection(db, 'chats', chatId, 'messages');
-      await addDoc(messagesRef, {
-        ...failureMessage,
-        timestamp: serverTimestamp(),
-      });
-    } catch (error) {
-      console.error('Failed to send failure message:', error);
-    }
-  }
-
   // =====================================
   // MESSAGE RETRIEVAL METHODS
   // =====================================
-
-  /**
-   * Sets up real-time listener for recent messages in a chat
-   */
-  static listenToRecentMessages(
-    chatId: string,
-    currentUserId: string,
-    callback: (messages: Message[]) => void,
-    messageLimit: number = this.DEFAULT_MESSAGE_LIMIT
-  ): () => void {
-    try {
-      const messagesRef = collection(db, 'chats', chatId, 'messages');
-      const q = query(messagesRef, orderBy('timestamp', 'desc'), limit(messageLimit));
-
-      const unsubscribe = onSnapshot(
-        q,
-        async (snapshot) => {
-          const chat = await ChatService.getChatById(chatId);
-          const messages = await this.handleDecryption(snapshot.docs, chat);
-          const reversedMessages = messages.reverse(); // Show oldest first
-
-          // Mark unread messages as read
-          const unreadMessages = reversedMessages.filter(
-            msg => msg.senderId !== currentUserId && (!msg.readBy || !msg.readBy.includes(currentUserId))
-          );
-
-          if (unreadMessages.length > 0) {
-            await this.markMessagesAsRead(chatId, currentUserId, unreadMessages.map(m => m.id));
-          }
-
-          // Update message statuses
-          const updatedMessages = reversedMessages.map(msg => ({
-            ...msg,
-            status: this.calculateMessageStatus(msg, currentUserId),
-          }));
-
-          callback(updatedMessages);
-        },
-        (error: any) => {
-          throw new AppError(
-            ErrorType.STORAGE,
-            'Failed to load messages',
-            error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
-          );
-        }
-      );
-
-      return unsubscribe;
-    } catch (error: any) {
-      throw new AppError(
-        ErrorType.STORAGE,
-        'Failed to set up message listener',
-        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
-      );
-    }
-  }
 
   /**
    * Loads older messages with pagination
@@ -420,7 +229,7 @@ export class MessageService {
 
       const snapshot = await getDocs(q);
       const chat = await ChatService.getChatById(chatId);
-      const messages = await this.handleDecryption(snapshot.docs, chat);
+      const messages = await this.handleDecryption(snapshot.docs.map(doc => doc.data()), chat);
 
       return {
         messages: messages.reverse(), // Show oldest first
@@ -459,9 +268,12 @@ export class MessageService {
       });
 
       await batch.commit();
-    } catch (error) {
-      console.error('Error marking messages as read:', error);
-      // Don't throw error to avoid disrupting chat experience
+    } catch (error: any) {
+      throw new AppError(
+        ErrorType.STORAGE,
+        'Failed to mark messages as read',
+        error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
+      );
     }
   }
 
