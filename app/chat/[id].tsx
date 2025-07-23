@@ -160,18 +160,6 @@ export default function ChatScreen() {
     update();
   };
 
-
-  // Update displayed messages when allMessages changes
-  useEffect(() => {
-    if (messages.length > 0) {
-      const latestMessage = messages[0];
-      console.log(
-        `Latest Message ID: ${latestMessage.id}, Content: ${latestMessage.content}, Status: ${latestMessage.status} | Current user username: ${userProfile?.username}`
-      );
-    }
-
-  }, [messages]);
-
   // Separate function to check contact status with chat data
   const checkContactStatusWithData = async (chatData: Chat) => {
     if (!user) return;
