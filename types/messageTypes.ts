@@ -1,6 +1,5 @@
 // types/messageTypes.ts
-import * as ImagePicker from 'expo-image-picker';
-
+export type MessageStatus = 'sending' | 'sent' | 'read' | 'failed' | 'deleted' | 'edited';
 export interface ImageData {
   uri: string;
   downloadURL: string;
@@ -27,7 +26,7 @@ export interface Message {
   content?: string;
   type: 'text' | 'image' | 'video' | 'file' | 'deleted';
   timestamp: string;
-  status: 'sending' | 'sent' | 'read';
+  status: MessageStatus;
   readBy?: string[]; // Array of user IDs who have read this message
   editedAt?: string;
   // 🔐 Encryption support

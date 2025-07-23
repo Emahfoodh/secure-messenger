@@ -9,7 +9,7 @@ import { isContact } from '@/services/contactService';
 import { ErrorService } from '@/services/errorService';
 import { MessageService, MessagesPaginationResult } from '@/services/messageService';
 import { getUserProfile, UserProfile } from '@/services/userService';
-import { Chat, Message, SendMessageData } from '@/types/messageTypes';
+import { Chat, Message, MessageStatus, SendMessageData } from '@/types/messageTypes';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { DocumentData, QueryDocumentSnapshot } from 'firebase/firestore';
@@ -53,7 +53,6 @@ export default function ChatScreen() {
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | undefined>();
-  const [allMessages, setAllMessages] = useState<Message[]>([]);
   
   const flatListRef = useRef<FlatList>(null);
 
@@ -89,17 +88,34 @@ export default function ChatScreen() {
 
     initializeChat();
 
-    // console.log('Chat initialized:', chatId, user?.uid);
-    // TODO: call the message listener
-    const unsubscribe = MessageService.listenForMessages(chatId,user.uid, (message) => {
-      setAllMessages(prevMessages => {
-        // Avoid duplicates by checking message ID
-        if (prevMessages.some(msg => msg.id === message.id)) {
+    const unsubscribe = MessageService.listenForMessages(
+      chatId,
+      user.uid,
+      // Callback for new messages
+      (message) => {
+        setMessages(prevMessages => {
+          // Check if message already exists (for new messages)
+          const existingIndex = prevMessages.findIndex(m => m.id === message.id);
+          if (existingIndex === -1) {
+            // New message - add it
+            return [message, ...prevMessages].sort((a, b) => 
+              new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+          }
           return prevMessages;
-        }
-        return [message, ...prevMessages].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      });
-    });
+        });
+        MessageService.markMessageAsRead(chatId, user.uid, message.id);
+      },
+      // Callback for status changes
+      (messageId, newStatus, updatedMessage) => {
+        tryUpdateMessage(
+          messageId,
+          newStatus,
+          updatedMessage
+        );
+      }
+    );
+
 
 
     return () => {
@@ -109,10 +125,52 @@ export default function ChatScreen() {
     };
   }, []);
 
+  const tryUpdateMessage = (
+    messageId: string,
+    newStatus: MessageStatus,
+    updatedMessage: Message,
+    maxRetries: number = 10,
+    delay: number = 500 // ms
+  ): void => {
+    let attempts = 0;
+
+    const update = (): void => {
+      let found = false;
+
+      setMessages((prevMessages: Message[]): Message[] => {
+        const newMessages = prevMessages.map((msg: Message): Message => {
+          if (msg.id === messageId) {
+            found = true;
+            return { ...updatedMessage, status: newStatus };
+          }
+          return msg;
+        });
+
+        return newMessages.sort((a: Message, b: Message) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+      });
+
+      if (!found && attempts < maxRetries) {
+        attempts++;
+        setTimeout(update, delay);
+      }
+    };
+
+    update();
+  };
+
+
   // Update displayed messages when allMessages changes
   useEffect(() => {
-    setMessages(allMessages);
-  }, [allMessages]);
+    if (messages.length > 0) {
+      const latestMessage = messages[0];
+      console.log(
+        `Latest Message ID: ${latestMessage.id}, Content: ${latestMessage.content}, Status: ${latestMessage.status} | Current user username: ${userProfile?.username}`
+      );
+    }
+
+  }, [messages]);
 
   // Separate function to check contact status with chat data
   const checkContactStatusWithData = async (chatData: Chat) => {
@@ -151,7 +209,7 @@ export default function ChatScreen() {
       );
 
       if (result.messages.length > 0) {
-        setAllMessages(prevMessages => {
+        setMessages(prevMessages => {
           const newMessages = [...result.messages, ...prevMessages];
           // Sort messages by timestamp to maintain order
             return newMessages.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -229,19 +287,23 @@ export default function ChatScreen() {
       };
 
       // Add temporary message to the UI
-      setMessages(prevMessages => [tempMessage, ...prevMessages]);
+      console.log('Adding temporary message:', tempMessage.content);
+      let messagesCopy = [tempMessage,...messages];
+      setMessages(messagesCopy);
 
       // 🔐 Send message (encryption handled automatically in MessageService)
       const messageId = await MessageService.sendMessage(chatId, user.uid, otherParticipant.uid, tempMessage as SendMessageData);
+      const updatedMessage: Message = {
+        ...tempMessage,
+        id: messageId, // Update with real ID from server
+        status: 'sent', // Update status to sent
+      };
+      messagesCopy = messagesCopy.map(msg => 
+        msg.id === tempId ? updatedMessage : msg
+      );
 
       // Update the temporary message with the real ID and sent status
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg.id === tempId 
-            ? { ...msg, id: messageId, status: 'sent' }
-            : msg
-        )
-      );
+      setMessages(messagesCopy);
 
     } catch (error) {
       // Remove the temporary message on error

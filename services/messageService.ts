@@ -28,7 +28,7 @@ import { AppError, ErrorType } from '@/services/errorService';
 import { ImageService } from '@/services/imageService';
 import { getUserProfile } from '@/services/userService';
 import { VideoService } from '@/services/videoService';
-import { Chat, Message, SendMessageData } from '@/types/messageTypes';
+import { Chat, Message, MessageStatus, SendMessageData } from '@/types/messageTypes';
 
 export interface MessagesPaginationResult {
   messages: Message[];
@@ -94,8 +94,8 @@ export class MessageService {
       content: messageData.content || '',
       type: messageData.type || 'text',
       timestamp: new Date().toISOString(),
-      status: 'sending',
-      isEncrypted: false,
+      status: 'sent',
+      // isEncrypted will be set in sendMessage after encryption handler
       ...(messageData.imageData && { imageData: messageData.imageData }),
       ...(messageData.videoData && { videoData: messageData.videoData }),
       ...(messageData.replyTo && { replyTo: messageData.replyTo }),
@@ -231,7 +231,9 @@ export class MessageService {
 
       const snapshot = await getDocs(q);
       const chat = await ChatService.getChatById(chatId);
-      const messages = await this.handleDecryption(snapshot.docs.map(doc => doc.data()), chat);
+      // Attach doc id to each message
+      const rawMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const messages = await this.handleDecryption(rawMessages, chat);
 
       return {
         messages: messages.reverse(), // Show oldest first
@@ -253,7 +255,8 @@ export class MessageService {
   static listenForMessages(
     chatId: string,
     userId: string,
-    callback: (message: Message) => void
+    onNewMessage: (message: Message) => void,
+    onStatusChange?: (messageId: string, newStatus: MessageStatus, message: Message) => void
   ): (() => void) {
     const messagesRef = collection(db, 'chats', chatId, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
@@ -268,29 +271,36 @@ export class MessageService {
 
       const chat = await ChatService.getChatById(chatId);
       
-      // Process only newly added messages
-      const addedDocs = snapshot.docChanges()
-        .filter(change => change.type === 'added')
-        .map(change => ({ id: change.doc.id, ...change.doc.data() })) as Message[];
-
-      if (addedDocs.length === 0) return;
-      const filteredDocs = addedDocs.filter(doc => doc.senderId !== userId);
-      const decryptedMessages = await this.handleDecryption(
-        filteredDocs,
-        chat
-      );
-
-      decryptedMessages.forEach((message, index) => {
-        callback({
-          ...message,
-          id: addedDocs[index].id
-        });
-      });
+      // Process document changes
+      const changes = snapshot.docChanges();
+      
+      for (const change of changes) {
+        const messageData = { id: change.doc.id, ...change.doc.data() } as Message;
+        
+        if (change.type === 'added') {
+          // Handle new messages (existing logic)
+          if (messageData.senderId == userId) continue;
+          const decryptedMessages = await this.handleDecryption([messageData], chat);
+           onNewMessage(decryptedMessages[0]);
+        } else if (change.type === 'modified') {
+          // Handle message modifications (status changes, edits, etc.)
+          if (messageData.senderId !== userId || (messageData.senderId == userId && messageData.status == 'sent')) continue;
+          const decryptedMessages = await this.handleDecryption([messageData], chat);
+          const decryptedMessage = decryptedMessages[0];
+          
+          // Call the status change callback if provided
+          if (onStatusChange) {
+            onStatusChange(messageData.id, messageData.status || 'unknown', decryptedMessage);
+          }
+          
+          // // Also call the main callback to update the message in the UI
+          // onNewMessage(decryptedMessage);
+        }
+      }
     });
 
     return unsubscribe;
   }
-
 
   // =====================================
   // MESSAGE MANAGEMENT METHODS
@@ -351,28 +361,28 @@ export class MessageService {
   }
 
   /**
-   * Marks multiple messages as read by a user
+   * Marks a single message as read by a user
    */
-  static async markMessagesAsRead(
+  static async markMessageAsRead(
     chatId: string,
     userId: string,
-    messageIds: string[]
+    messageId: string
   ): Promise<void> {
     try {
-      const batch = writeBatch(db);
-
-      messageIds.forEach(messageId => {
-        const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
-        batch.update(messageRef, {
-          readBy: firestoreArrayUnion(userId),
-        });
+      const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
+      
+      // Update the message to include the user in readBy array and set status to 'read'
+      await updateDoc(messageRef, {
+        readBy: firestoreArrayUnion(userId),
+        status: 'read'
       });
 
-      await batch.commit();
+      // Also mark the chat as read for this user
+      await ChatService.markChatAsRead(chatId, userId);
     } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
-        'Failed to mark messages as read',
+        'Failed to mark message as read',
         error instanceof AppError ? error : error instanceof Error ? error : new Error(error)
       );
     }
