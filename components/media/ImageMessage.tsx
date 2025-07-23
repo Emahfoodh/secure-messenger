@@ -11,14 +11,14 @@ import {
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { ImageData } from '@/types/messageTypes';
+import { ImageData, MessageStatus } from '@/types/messageTypes';
 import { ImageService } from '@/services/imageService';
 
 interface ImageMessageProps {
   imageData: ImageData;
   isOwnMessage: boolean;
   timestamp: string;
-  status?: 'sending' | 'sent' | 'read';
+  status?: MessageStatus;
   maxWidth?: number;
 }
 

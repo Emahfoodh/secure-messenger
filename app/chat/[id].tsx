@@ -275,7 +275,6 @@ export default function ChatScreen() {
       };
 
       // Add temporary message to the UI
-      console.log('Adding temporary message:', tempMessage.content);
       let messagesCopy = [tempMessage,...messages];
       setMessages(messagesCopy);
 

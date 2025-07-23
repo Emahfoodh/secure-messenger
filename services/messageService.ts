@@ -292,9 +292,6 @@ export class MessageService {
           if (onStatusChange) {
             onStatusChange(messageData.id, messageData.status || 'unknown', decryptedMessage);
           }
-          
-          // // Also call the main callback to update the message in the UI
-          // onNewMessage(decryptedMessage);
         }
       }
     });
@@ -397,7 +394,7 @@ export class MessageService {
       await updateDoc(messageRef, {
         content: this.DELETED_MESSAGE_CONTENT,
         type: 'deleted',
-        editedAt: new Date().toISOString(),
+        deletedAt: new Date().toISOString(),
         isEncrypted: false,
         encryptedContent: null,
         imageData: null,

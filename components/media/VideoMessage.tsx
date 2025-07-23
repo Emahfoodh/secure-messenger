@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { VideoData } from '@/types/messageTypes';
+import { MessageStatus, VideoData } from '@/types/messageTypes';
 import { VideoService } from '@/services/videoService';
 import { useVideoPlayer, VideoView } from 'expo-video';
 
@@ -18,7 +18,7 @@ interface VideoMessageProps {
   videoData: VideoData;
   isOwnMessage: boolean;
   timestamp: string;
-  status?: 'sending' | 'sent' | 'read';
+  status?: MessageStatus;
   maxWidth?: number;
 }
 
