@@ -1,6 +1,6 @@
 // types/messageTypes.ts
-export type MessageStatus = 'sending' | 'sent' | 'read' | 'edited' | 'deleted';
-export type MessageType = 'text' | 'image' | 'video';
+export type MessageStatus = "sending" | "sent" | "read" | "deleted";
+export type MessageType = "text" | "image" | "video";
 export interface ImageData {
   uri: string;
   downloadURL: string;
@@ -108,6 +108,6 @@ export interface ChatListItem {
     senderUsername: string;
     timestamp: string;
     isOwnMessage: boolean;
-    isEncrypted?: boolean; 
+    isEncrypted?: boolean;
   };
 }

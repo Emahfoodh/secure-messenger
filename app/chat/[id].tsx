@@ -74,6 +74,12 @@ export default function ChatScreen() {
 
   // Handle message long press
   const handleMessageLongPress = (message: Message) => {
+    if (
+      message.senderId !== user?.uid ||
+      message.status === "deleted" ||
+      message.type !== "text"
+    )
+      return;
     setSelectedMessage(message);
     setShowMessageActionModal(true);
   };

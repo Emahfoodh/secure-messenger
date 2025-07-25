@@ -1,113 +1,248 @@
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from "react-native"
-import type { Message } from "@/types/messageTypes"
-import { MessageService } from "@/services/messageService"
+"use client";
+import { MessageService } from "@/services/messageService";
+import type { Message } from "@/types/messageTypes";
+import type React from "react";
+import { useState, useEffect } from "react";
+import {
+  Modal,
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  TextInput,
+  Dimensions,
+  KeyboardAvoidingView,
+  ScrollView,
+  Platform,
+} from "react-native";
 
 interface MessageActionModalProps {
-  visible: boolean
-  onClose: () => void
-  chatId: string
-  message: Message | null
-  isOwnMessage: boolean
+  visible: boolean;
+  onClose: () => void;
+  chatId: string;
+  message: Message | null;
+  isOwnMessage: boolean;
 }
 
-export default function MessageActionModal({ visible, onClose, message, isOwnMessage, chatId }: MessageActionModalProps) {
+const { height: screenHeight } = Dimensions.get("window");
+
+const MessageActionModal: React.FC<MessageActionModalProps> = ({
+  visible,
+  onClose,
+  message,
+  isOwnMessage,
+  chatId,
+}) => {
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedText, setEditedText] = useState("");
+
   const handleEdit = () => {
-    console.log("Edit message:", message?.id, message?.content)
-    onClose()
-  }
+    setEditedText(message?.content || "");
+    setIsEditMode(true);
+  };
+
+  const handleConfirmEdit = () => {
+    if (!message || !editedText.trim()) return;
+    console.log("Edit confirmed:", {
+      messageId: message?.id,
+      originalContent: message?.content,
+      editedContent: editedText,
+    });
+    MessageService.editMessage(chatId, message.id, editedText);
+    setIsEditMode(false);
+    setEditedText("");
+    onClose();
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditedText("");
+  };
 
   const handleDelete = () => {
-    if (!message) return
-    MessageService.deleteMessage(chatId,message?.id)
-    onClose()
-  }
+    if (!message) return;
+    MessageService.deleteMessage(chatId, message?.id);
+    onClose();
+  };
 
-  if (!message) return null
+  useEffect(() => {
+    if (!visible) {
+      setIsEditMode(false);
+      setEditedText("");
+    }
+  }, [visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Message Actions</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Text style={styles.closeButtonText}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Message Preview */}
-          <View style={styles.messagePreview}>
-            <Text style={styles.messagePreviewText} numberOfLines={2}>
-              {message.content || "Media message"}
-            </Text>
-          </View>
-
-          <View style={styles.actions}>
-            {/* Edit Button - Only show for own messages and text messages */}
-            {isOwnMessage && message.type === "text" && (
-              <TouchableOpacity style={styles.actionButton} onPress={handleEdit}>
-                <View style={styles.actionIcon}>
-                  <Text style={styles.iconText}>✏️</Text>
-                </View>
-                <View style={styles.actionContent}>
-                  <Text style={styles.actionTitle}>Edit</Text>
-                  <Text style={styles.actionSubtitle}>Edit this message</Text>
-                </View>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.container}>
+            <View style={styles.header}>
+              <Text style={styles.title}>
+                {isEditMode ? "Edit Message" : "Message Actions"}
+              </Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+                <Text style={styles.closeButtonText}>✕</Text>
               </TouchableOpacity>
-            )}
+            </View>
 
-            {/* Delete Button - Only show for own messages */}
-            {isOwnMessage && (
-              <TouchableOpacity style={styles.actionButton} onPress={handleDelete}>
-                <View style={[styles.actionIcon, styles.deleteIcon]}>
-                  <Text style={styles.iconText}>🗑️</Text>
-                </View>
-                <View style={styles.actionContent}>
-                  <Text style={[styles.actionTitle, styles.deleteText]}>Delete</Text>
-                  <Text style={styles.actionSubtitle}>Delete this message</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-
-            {/* If not own message, show info */}
-            {!isOwnMessage && (
-              <View style={styles.infoContainer}>
-                <Text style={styles.infoText}>You can only edit and delete your own messages</Text>
+            {/* Message Preview - Only show when not in edit mode */}
+            {!isEditMode && (
+              <View style={styles.messagePreview}>
+                <Text style={styles.messagePreviewText} numberOfLines={2}>
+                  {message?.content || "Media message"}
+                </Text>
               </View>
             )}
-          </View>
 
-          <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+            {/* Edit Mode */}
+            {isEditMode ? (
+              <View style={styles.editContainer}>
+                <Text style={styles.editLabel}>Edit your message:</Text>
+                <TextInput
+                  style={styles.editInput}
+                  value={editedText}
+                  onChangeText={setEditedText}
+                  multiline
+                  placeholder="Enter your message..."
+                  placeholderTextColor="#999"
+                  autoFocus
+                  maxLength={1000}
+                />
+                <Text style={styles.characterCount}>
+                  {editedText.length}/1000
+                </Text>
+                <View style={styles.editActions}>
+                  <TouchableOpacity
+                    style={[styles.editButton, styles.cancelEditButton]}
+                    onPress={handleCancelEdit}
+                  >
+                    <Text style={styles.cancelEditButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.editButton, styles.confirmButton]}
+                    onPress={handleConfirmEdit}
+                    disabled={!editedText.trim()}
+                  >
+                    <Text
+                      style={[
+                        styles.confirmButtonText,
+                        !editedText.trim() && styles.disabledButtonText,
+                      ]}
+                    >
+                      Confirm
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              /* Action Buttons - Only show when not in edit mode */
+              <View style={styles.actions}>
+                {/* Edit Button - Only show for own messages and text messages */}
+                {isOwnMessage && message?.type === "text" && (
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={handleEdit}
+                  >
+                    <View style={styles.actionIcon}>
+                      <Text style={styles.iconText}>✏️</Text>
+                    </View>
+                    <View style={styles.actionContent}>
+                      <Text style={styles.actionTitle}>Edit</Text>
+                      <Text style={styles.actionSubtitle}>
+                        Edit this message
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {/* Delete Button - Only show for own messages */}
+                {isOwnMessage && (
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={handleDelete}
+                  >
+                    <View style={[styles.actionIcon, styles.deleteIcon]}>
+                      <Text style={styles.iconText}>🗑️</Text>
+                    </View>
+                    <View style={styles.actionContent}>
+                      <Text style={[styles.actionTitle, styles.deleteText]}>
+                        Delete
+                      </Text>
+                      <Text style={styles.actionSubtitle}>
+                        Delete this message
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {/* If not own message, show info */}
+                {!isOwnMessage && (
+                  <View style={styles.infoContainer}>
+                    <Text style={styles.infoText}>
+                      You can only edit and delete your own messages
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Cancel Button - Only show when not in edit mode */}
+            {!isEditMode && (
+              <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  scrollContainer: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   container: {
     backgroundColor: "#fff",
-    borderRadius: 20,
-    width: "100%",
+    borderRadius: 16,
+    width: "80%",
     maxWidth: 400,
-    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+    maxHeight: screenHeight * 0.8, // Limit max height
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    padding: 20,
+    alignItems: "center",
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: "#eee",
   },
   title: {
     fontSize: 18,
@@ -115,98 +250,140 @@ const styles = StyleSheet.create({
     color: "#333",
   },
   closeButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
+    padding: 8,
   },
   closeButtonText: {
-    fontSize: 16,
+    fontSize: 20,
     color: "#666",
-    fontWeight: "500",
   },
   messagePreview: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: "#f8f9fa",
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#e9ecef",
+    borderBottomColor: "#eee",
   },
   messagePreviewText: {
-    fontSize: 14,
-    color: "#666",
-    fontStyle: "italic",
+    fontSize: 16,
+    color: "#444",
   },
   actions: {
-    padding: 20,
+    padding: 16,
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-    backgroundColor: "#f8f9fa",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e9ecef",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
   },
   actionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#007AFF",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 16,
-  },
-  deleteIcon: {
-    backgroundColor: "#FF3B30",
+    marginRight: 12,
   },
   iconText: {
-    fontSize: 24,
+    fontSize: 20,
   },
   actionContent: {
     flex: 1,
   },
   actionTitle: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "500",
     color: "#333",
-    marginBottom: 2,
-  },
-  deleteText: {
-    color: "#FF3B30",
   },
   actionSubtitle: {
     fontSize: 14,
     color: "#666",
   },
+  deleteIcon: {
+    backgroundColor: "#ffebee",
+  },
+  deleteText: {
+    color: "#d32f2f",
+  },
+  cancelButton: {
+    paddingVertical: 14,
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "500",
+  },
   infoContainer: {
-    padding: 16,
-    backgroundColor: "#fff3cd",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#ffeaa7",
+    paddingVertical: 16,
+    alignItems: "center",
   },
   infoText: {
     fontSize: 14,
-    color: "#856404",
+    color: "#777",
     textAlign: "center",
   },
-  cancelButton: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    paddingVertical: 16,
+  editContainer: {
+    padding: 20,
+  },
+  editLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    minHeight: 100,
+    maxHeight: 150, // Reduced max height to ensure buttons are visible
+    textAlignVertical: "top",
     backgroundColor: "#f8f9fa",
+  },
+  characterCount: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "right",
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  editActions: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  editButton: {
+    flex: 1,
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
   },
-  cancelButtonText: {
+  cancelEditButton: {
+    backgroundColor: "#f8f9fa",
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  confirmButton: {
+    backgroundColor: "#007AFF",
+  },
+  cancelEditButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#666",
   },
-})
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  disabledButtonText: {
+    color: "rgba(255, 255, 255, 0.5)",
+  },
+});
+
+export default MessageActionModal;

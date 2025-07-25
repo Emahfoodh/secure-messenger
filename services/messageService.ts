@@ -284,7 +284,7 @@ export class MessageService {
            onNewMessage(decryptedMessages[0]);
         } else if (change.type === 'modified') {
           // Handle message modifications (status changes, edits, etc.)
-          if ((messageData.senderId !== userId && messageData.status !== 'edited' && messageData.status !== 'deleted') || (messageData.senderId == userId && messageData.status == 'sent')) continue;
+          if ((messageData.senderId !== userId && !messageData.isEdited && messageData.status !== 'deleted') || (messageData.senderId == userId && messageData.status == 'sent')) continue;
           const decryptedMessages = await this.handleDecryption([messageData], chat);
           const decryptedMessage = decryptedMessages[0];
           
