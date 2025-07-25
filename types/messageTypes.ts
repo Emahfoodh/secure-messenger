@@ -1,5 +1,6 @@
 // types/messageTypes.ts
-export type MessageStatus = 'sending' | 'sent' | 'read' | 'failed' | 'deleted' | 'edited';
+export type MessageStatus = 'sending' | 'sent' | 'read' | 'failed' | 'deleted';
+export type MessageType = 'text' | 'image' | 'video';
 export interface ImageData {
   uri: string;
   downloadURL: string;
@@ -24,10 +25,11 @@ export interface Message {
   senderId: string;
   senderUsername: string;
   content?: string;
-  type: 'text' | 'image' | 'video' | 'file' | 'deleted';
+  type: MessageType;
   timestamp: string;
   status: MessageStatus;
   readBy?: string[]; // Array of user IDs who have read this message
+  isEdited?: boolean;
   editedAt?: string;
   // 🔐 Encryption support
   isEncrypted?: boolean; // Whether this message is encrypted
@@ -44,7 +46,7 @@ export interface Message {
 
 export interface SendMessageData {
   content: string;
-  type: 'text' | 'image' | 'video' | 'file';
+  type: MessageType;
   // 🔐 Encryption flag
   shouldEncrypt?: boolean; // Whether to encrypt this message
   // Media-specific data for sending
@@ -66,7 +68,7 @@ export interface Chat {
     senderId: string;
     senderUsername: string;
     timestamp: string;
-    type: 'text' | 'image' | 'video' | 'file';
+    type: MessageType;
     isEncrypted?: boolean; // 🔐 NEW: Whether last message is encrypted
   };
   lastActivity: string;

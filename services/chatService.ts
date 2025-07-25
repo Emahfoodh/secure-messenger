@@ -350,10 +350,10 @@ export class ChatService {
   /**
    * Get a specific chat by ID
    */
-  static async getChatById(chatId: string): Promise<Chat | null> {
+  static async getChatById(chatId: string): Promise<Chat> {
     try {
       const chatDoc = await getDoc(doc(db, 'chats', chatId));
-      if (!chatDoc.exists()) return null;
+      if (!chatDoc.exists()) throw new AppError(ErrorType.VALIDATION, 'Chat not found');
 
       const chatData = chatDoc.data();
       return {

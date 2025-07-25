@@ -393,7 +393,7 @@ export class MessageService {
       const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
       await updateDoc(messageRef, {
         content: this.DELETED_MESSAGE_CONTENT,
-        type: 'deleted',
+        status: 'deleted',
         deletedAt: new Date().toISOString(),
         isEncrypted: false,
         encryptedContent: null,
@@ -427,6 +427,7 @@ export class MessageService {
       const messageRef = doc(db, 'chats', chatId, 'messages', messageId);
       await updateDoc(messageRef, {
         content: finalContent,
+        isEdited: true,
         editedAt: new Date().toISOString(),
         isEncrypted,
         ...(encryptedContent && { encryptedContent }),
