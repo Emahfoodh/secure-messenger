@@ -5,9 +5,9 @@ import MessageItem from "@/components/chat/MessageItem";
 import ImagePickerModal from "@/components/media/ImagePickerModal";
 import VideoPickerModal from "@/components/media/VideoPickerModal";
 import { useAuth } from "@/context/AuthContext";
-import { ChatService } from "@/services/chatService";
 import { isContact } from "@/services/contactService";
 import { ErrorService } from "@/services/errorService";
+import { firebaseChatService } from "@/services/firebaseChatService";
 import {
   FirebaseMessageService,
   type MessagesPaginationResult,
@@ -96,7 +96,7 @@ export default function ChatScreen() {
     const initializeChat = async () => {
       try {
         // First load chat details
-        const chatData = await ChatService.getChatById(chatId);
+        const chatData = await firebaseChatService.getChatById(chatId);
         setChat(chatData);
 
         // Then check contact status
@@ -110,7 +110,10 @@ export default function ChatScreen() {
         }
 
         await loadOlderMessages();
-        await FirebaseMessageService.markOtherUsersMessagesAsRead(chatId, user.uid);
+        await FirebaseMessageService.markOtherUsersMessagesAsRead(
+          chatId,
+          user.uid
+        );
       } catch (error) {
         console.error("Error initializing chat:", error);
         ErrorService.handleError(error, "Load Chat");

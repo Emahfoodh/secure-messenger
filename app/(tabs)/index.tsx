@@ -1,10 +1,10 @@
-// app/(tabs)/index.tsx 
+// app/(tabs)/index.tsx
 
-import { useAuth } from '@/context/AuthContext';
-import { ChatService } from '@/services/chatService';
-import { ChatListItem } from '@/types/messageTypes';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useAuth } from "@/context/AuthContext";
+import { firebaseChatService } from "@/services/firebaseChatService";
+import { ChatListItem } from "@/types/messageTypes";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   FlatList,
   Image,
@@ -13,7 +13,7 @@ import {
   Text,
   TouchableOpacity,
   View,
-} from 'react-native';
+} from "react-native";
 
 interface ChatItemProps {
   item: ChatListItem;
@@ -29,36 +29,38 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
     const diffInDays = diffInMs / (1000 * 60 * 60 * 24);
 
     if (diffInHours < 24) {
-      return date.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit',
-        hour12: true 
+      return date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
       });
     } else if (diffInDays < 7) {
-      return date.toLocaleDateString('en-US', { weekday: 'short' });
+      return date.toLocaleDateString("en-US", { weekday: "short" });
     } else {
-      return date.toLocaleDateString('en-US', { 
-        month: 'short', 
-        day: 'numeric' 
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
       });
     }
   };
 
   const getLastMessagePreview = () => {
     if (!item.lastMessage) {
-      return 'No messages yet';
+      return "No messages yet";
     }
 
-    const { content, isOwnMessage, senderUsername, isEncrypted } = item.lastMessage;
-    
+    const { content, isOwnMessage, senderUsername, isEncrypted } =
+      item.lastMessage;
+
     // 🔐 Handle encrypted message previews
     let preview = content;
-    if (isEncrypted && content === '🔒 Encrypted message') {
-      preview = '🔒 Encrypted message';
+    if (isEncrypted && content === "🔒 Encrypted message") {
+      preview = "🔒 Encrypted message";
     } else {
-      preview = content.length > 50 ? `${content.substring(0, 50)}...` : content;
+      preview =
+        content.length > 50 ? `${content.substring(0, 50)}...` : content;
     }
-    
+
     if (isOwnMessage) {
       return `You: ${preview}`;
     } else {
@@ -69,9 +71,9 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
   // 🔐 Get encryption icon for chat
   const getEncryptionIcon = () => {
     if (item.chat.isSecretChat) {
-      return '🔒'; // Secret chat
+      return "🔒"; // Secret chat
     } else if (item.chat.encryptionEnabled) {
-      return '🔐'; // Encrypted chat
+      return "🔐"; // Encrypted chat
     }
     return null; // Regular chat
   };
@@ -86,9 +88,9 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
     >
       <View style={styles.avatarContainer}>
         {item.otherParticipant.profilePicture ? (
-          <Image 
-            source={{ uri: item.otherParticipant.profilePicture }} 
-            style={styles.avatar} 
+          <Image
+            source={{ uri: item.otherParticipant.profilePicture }}
+            style={styles.avatar}
           />
         ) : (
           <View style={styles.avatarPlaceholder}>
@@ -100,7 +102,7 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
         {item.unreadCount > 0 && (
           <View style={styles.unreadBadge}>
             <Text style={styles.unreadText}>
-              {item.unreadCount > 99 ? '99+' : item.unreadCount}
+              {item.unreadCount > 99 ? "99+" : item.unreadCount}
             </Text>
           </View>
         )}
@@ -110,7 +112,8 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
         <View style={styles.chatHeader}>
           <View style={styles.chatNameContainer}>
             <Text style={styles.chatName}>
-              {item.otherParticipant.displayName || item.otherParticipant.username}
+              {item.otherParticipant.displayName ||
+                item.otherParticipant.username}
             </Text>
             {/* 🔐 Encryption indicator */}
             {encryptionIcon && (
@@ -118,17 +121,17 @@ const ChatItem: React.FC<ChatItemProps> = ({ item, onPress }) => {
             )}
           </View>
           <Text style={styles.timestamp}>
-            {item.lastMessage ? formatTime(item.lastMessage.timestamp) : ''}
+            {item.lastMessage ? formatTime(item.lastMessage.timestamp) : ""}
           </Text>
         </View>
-        
+
         <View style={styles.messagePreviewContainer}>
-          <Text 
+          <Text
             style={[
               styles.lastMessage,
               item.unreadCount > 0 && styles.unreadMessage,
               // 🔐 Style encrypted message previews differently
-              item.lastMessage?.isEncrypted && styles.encryptedMessage
+              item.lastMessage?.isEncrypted && styles.encryptedMessage,
             ]}
             numberOfLines={1}
           >
@@ -156,20 +159,26 @@ export default function ChatsScreen() {
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = ChatService.listenToUserChats(user.uid, (userChats) => {
-      // 🔐 Sort chats to show secret chats prominently if needed
-      const sortedChats = userChats.sort((a, b) => {
-        // First sort by secret chat status (secret chats first)
-        if (a.chat.isSecretChat && !b.chat.isSecretChat) return -1;
-        if (!a.chat.isSecretChat && b.chat.isSecretChat) return 1;
-        
-        // Then sort by last activity
-        return new Date(b.chat.lastActivity).getTime() - new Date(a.chat.lastActivity).getTime();
-      });
-      
-      setChats(sortedChats);
-      setLoading(false);
-    });
+    const unsubscribe = firebaseChatService.listenToUserChats(
+      user.uid,
+      (userChats) => {
+        // 🔐 Sort chats to show secret chats prominently if needed
+        const sortedChats = userChats.sort((a, b) => {
+          // First sort by secret chat status (secret chats first)
+          if (a.chat.isSecretChat && !b.chat.isSecretChat) return -1;
+          if (!a.chat.isSecretChat && b.chat.isSecretChat) return 1;
+
+          // Then sort by last activity
+          return (
+            new Date(b.chat.lastActivity).getTime() -
+            new Date(a.chat.lastActivity).getTime()
+          );
+        });
+
+        setChats(sortedChats);
+        setLoading(false);
+      }
+    );
 
     return unsubscribe;
   }, [user]);
@@ -209,7 +218,7 @@ export default function ChatsScreen() {
         </Text>
         <TouchableOpacity
           style={styles.contactsButton}
-          onPress={() => router.push('/(tabs)/contacts')}
+          onPress={() => router.push("/(tabs)/contacts")}
         >
           <Text style={styles.contactsButtonText}>Go to Contacts</Text>
         </TouchableOpacity>
@@ -225,7 +234,7 @@ export default function ChatsScreen() {
           🔒 Secret chats use end-to-end encryption for maximum security
         </Text>
       </View>
-      
+
       <FlatList
         data={chats}
         renderItem={renderChat}
@@ -242,78 +251,78 @@ export default function ChatsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   // 🔐 Header info styles
   headerInfo: {
-    backgroundColor: '#f0f8ff',
+    backgroundColor: "#f0f8ff",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: "#e0e0e0",
   },
   headerInfoText: {
     fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    fontStyle: 'italic',
+    color: "#666",
+    textAlign: "center",
+    fontStyle: "italic",
   },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 20,
   },
   loadingText: {
     fontSize: 16,
-    color: '#666',
+    color: "#666",
   },
   emptyTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: "bold",
+    color: "#333",
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
     marginBottom: 10,
   },
   // 🔐 Encryption hint
   emptyHint: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
+    color: "#999",
+    textAlign: "center",
     marginBottom: 30,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
   contactsButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 8,
   },
   contactsButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   chatList: {
     flex: 1,
   },
   chatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: "#f0f0f0",
     // 🔐 Add slight background for secret chats
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   avatarContainer: {
-    position: 'relative',
+    position: "relative",
     marginRight: 12,
   },
   avatar: {
@@ -325,50 +334,50 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
   },
   avatarText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   unreadBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: -5,
     right: -5,
-    backgroundColor: '#ff3b30',
+    backgroundColor: "#ff3b30",
     borderRadius: 10,
     minWidth: 20,
     height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
   unreadText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   chatContent: {
     flex: 1,
   },
   chatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 4,
   },
   // 🔐 Chat name container with encryption indicator
   chatNameContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   chatName: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     flex: 1,
   },
   // 🔐 Encryption indicator styles
@@ -378,31 +387,31 @@ const styles = StyleSheet.create({
   },
   timestamp: {
     fontSize: 12,
-    color: '#999',
+    color: "#999",
   },
   // 🔐 Message preview container
   messagePreviewContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   lastMessage: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     flex: 1,
   },
   unreadMessage: {
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
   },
   // 🔐 Encrypted message styling
   encryptedMessage: {
-    fontStyle: 'italic',
-    color: '#34C759',
+    fontStyle: "italic",
+    color: "#34C759",
   },
   // 🔐 Secret chat badge
   secretChatBadge: {
-    backgroundColor: '#ffcc02',
+    backgroundColor: "#ffcc02",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -410,7 +419,7 @@ const styles = StyleSheet.create({
   },
   secretChatBadgeText: {
     fontSize: 10,
-    fontWeight: 'bold',
-    color: '#8b7500',
+    fontWeight: "bold",
+    color: "#8b7500",
   },
 });

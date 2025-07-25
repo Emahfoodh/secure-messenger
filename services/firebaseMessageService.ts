@@ -1,6 +1,5 @@
 // services/FirebaseMessageService.ts
 
-import * as ImagePicker from 'expo-image-picker';
 import {
   addDoc,
   collection,
@@ -14,17 +13,15 @@ import {
   query,
   QueryDocumentSnapshot,
   serverTimestamp,
-  setDoc,
   startAfter,
-  Timestamp,
   updateDoc,
   where,
-  writeBatch,
+  writeBatch
 } from 'firebase/firestore';
 
 import { db } from '@/config/firebaseConfig';
-import { ChatService } from '@/services/chatService';
 import { AppError, ErrorType } from '@/services/errorService';
+import { firebaseChatService } from '@/services/firebaseChatService';
 import { ImageService } from '@/services/imageService';
 import { getUserProfile } from '@/services/userService';
 import { VideoService } from '@/services/videoService';
@@ -150,7 +147,7 @@ export class FirebaseMessageService {
     messageData: SendMessageData,
   ): Promise<string> {
     try {
-      const chat = await ChatService.getChatById(chatId);
+      const chat = await firebaseChatService.getChatById(chatId);
       const baseMessage = await this.createBaseMessage(chatId, senderId, messageData);
 
       const { finalContent, encryptedContent, isEncrypted } = await this.handleEncryption(
@@ -190,7 +187,7 @@ export class FirebaseMessageService {
       // 🔐 Update last message in chat with encryption support
       const lastMessageContent = finalContent || (messageData.type === 'image' ? '📷 Photo' : messageData.type === 'video' ? '🎥 Video' : '');
 
-      await ChatService.updateLastMessage(
+      await firebaseChatService.updateLastMessage(
         chatId,
         senderId,
         baseMessage.senderUsername,
@@ -198,7 +195,7 @@ export class FirebaseMessageService {
         messageData.type,
         isEncrypted
       );
-      await ChatService.incrementUnreadCount(chatId, receiverId);
+      await firebaseChatService.incrementUnreadCount(chatId, receiverId);
       return docRef.id;
     } catch (error: any) {
       throw new AppError(
@@ -230,7 +227,7 @@ export class FirebaseMessageService {
       }
 
       const snapshot = await getDocs(q);
-      const chat = await ChatService.getChatById(chatId);
+      const chat = await firebaseChatService.getChatById(chatId);
       // Attach doc id to each message
       const rawMessages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const messages = await this.handleDecryption(rawMessages, chat);
@@ -269,7 +266,7 @@ export class FirebaseMessageService {
         return; // Skip initial snapshot
       }
 
-      const chat = await ChatService.getChatById(chatId);
+      const chat = await firebaseChatService.getChatById(chatId);
       
       // Process document changes
       const changes = snapshot.docChanges();
@@ -347,7 +344,7 @@ export class FirebaseMessageService {
       if (messageIds.length > 0) {
         await batch.commit();
       }
-      await ChatService.markChatAsRead(chatId, currentUserId);
+      await firebaseChatService.markChatAsRead(chatId, currentUserId);
     } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
@@ -375,7 +372,7 @@ export class FirebaseMessageService {
       });
 
       // Also mark the chat as read for this user
-      await ChatService.markChatAsRead(chatId, userId);
+      await firebaseChatService.markChatAsRead(chatId, userId);
     } catch (error: any) {
       throw new AppError(
         ErrorType.STORAGE,
@@ -418,7 +415,7 @@ export class FirebaseMessageService {
     newContent: string
   ): Promise<void> {
     try {
-      const chat = await ChatService.getChatById(chatId);
+      const chat = await firebaseChatService.getChatById(chatId);
       const { finalContent, encryptedContent, isEncrypted } = await this.handleEncryption(
         newContent,
         chat

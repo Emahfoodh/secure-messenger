@@ -1,4 +1,4 @@
-// services/chatService.ts
+// services/firebaseChatService.ts
 
 import { db } from '@/config/firebaseConfig';
 import { Contact } from '@/services/contactService';
@@ -19,7 +19,7 @@ import {
   writeBatch
 } from 'firebase/firestore';
 
-export class ChatService {
+export class firebaseChatService {
   /**
    * Helper method to safely convert Firestore timestamps to ISO strings
    */

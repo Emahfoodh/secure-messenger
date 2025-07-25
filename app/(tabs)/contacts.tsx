@@ -1,27 +1,27 @@
 // app/(tabs)/contacts.tsx
 
-import React, { useState, useEffect } from 'react';
+import { useAuth } from "@/context/AuthContext";
+import ContactRequestsScreen from "@/screens/contact/ContactRequestsScreen";
+import QRScannerScreen from "@/screens/contact/QRScannerScreen";
+import UserSearchScreen from "@/screens/contact/UserSearchScreen";
+import { Contact, getContacts, removeContact } from "@/services/contactService";
+import { ErrorService } from "@/services/errorService";
+import { firebaseChatService } from "@/services/firebaseChatService";
+import { getUserProfile } from "@/services/userService";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
+  Alert,
   FlatList,
   Image,
-  Alert,
   Modal,
-} from 'react-native';
-import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'expo-router';
-import { getContacts, removeContact, Contact } from '@/services/contactService';
-import { ChatService } from '@/services/chatService';
-import { getUserProfile } from '@/services/userService';
-import { ErrorService } from '@/services/errorService';
-import UserSearchScreen from '@/screens/contact/UserSearchScreen';
-import QRScannerScreen from '@/screens/contact/QRScannerScreen';
-import ContactRequestsScreen from '@/screens/contact/ContactRequestsScreen';
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-type TabType = 'contacts' | 'requests' | 'search' | 'scan';
+type TabType = "contacts" | "requests" | "search" | "scan";
 
 interface ContactItemProps {
   contact: Contact;
@@ -30,16 +30,25 @@ interface ContactItemProps {
   loading: boolean;
 }
 
-const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartChat, loading }) => {
+const ContactItem: React.FC<ContactItemProps> = ({
+  contact,
+  onRemove,
+  onStartChat,
+  loading,
+}) => {
   const [showChatOptions, setShowChatOptions] = useState(false); // 🔐 Show chat type options
 
   const handleRemove = () => {
     Alert.alert(
-      'Remove Contact',
+      "Remove Contact",
       `Are you sure you want to remove ${contact.username} from your contacts?`,
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => onRemove(contact) },
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => onRemove(contact),
+        },
       ]
     );
   };
@@ -54,8 +63,10 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartCha
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Start Chat with {contact.username}</Text>
-          
+          <Text style={styles.modalTitle}>
+            Start Chat with {contact.username}
+          </Text>
+
           <TouchableOpacity
             style={[styles.chatOptionButton, styles.regularChatButton]}
             onPress={() => {
@@ -105,18 +116,25 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartCha
     <View style={styles.contactItem}>
       <View style={styles.contactInfo}>
         {contact.profilePicture ? (
-          <Image source={{ uri: contact.profilePicture }} style={styles.avatar} />
+          <Image
+            source={{ uri: contact.profilePicture }}
+            style={styles.avatar}
+          />
         ) : (
           <View style={styles.avatarPlaceholder}>
-            <Text style={styles.avatarText}>{contact.username.charAt(0).toUpperCase()}</Text>
+            <Text style={styles.avatarText}>
+              {contact.username.charAt(0).toUpperCase()}
+            </Text>
           </View>
         )}
         <View style={styles.contactDetails}>
           <Text style={styles.username}>{contact.username}</Text>
-          {contact.displayName && <Text style={styles.displayName}>{contact.displayName}</Text>}
+          {contact.displayName && (
+            <Text style={styles.displayName}>{contact.displayName}</Text>
+          )}
         </View>
       </View>
-      
+
       <View style={styles.contactActions}>
         {/* 🔐 Changed to show chat options */}
         <TouchableOpacity
@@ -126,11 +144,8 @@ const ContactItem: React.FC<ContactItemProps> = ({ contact, onRemove, onStartCha
         >
           <Text style={styles.chatButtonText}>Chat</Text>
         </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.removeButton}
-          onPress={handleRemove}
-        >
+
+        <TouchableOpacity style={styles.removeButton} onPress={handleRemove}>
           <Text style={styles.removeButtonText}>Remove</Text>
         </TouchableOpacity>
       </View>
@@ -146,7 +161,7 @@ export default function ContactsScreen() {
   const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabType>('contacts');
+  const [activeTab, setActiveTab] = useState<TabType>("contacts");
   const [scannerVisible, setScannerVisible] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
 
@@ -156,13 +171,13 @@ export default function ContactsScreen() {
 
   const loadContacts = async () => {
     if (!user) return;
-    
+
     setLoading(true);
     try {
       const userContacts = await getContacts(user.uid);
       setContacts(userContacts);
     } catch (error) {
-      ErrorService.handleError(error, 'Contacts');
+      ErrorService.handleError(error, "Contacts");
     } finally {
       setLoading(false);
     }
@@ -173,15 +188,18 @@ export default function ContactsScreen() {
 
     try {
       await removeContact(user.uid, contact.uid);
-      Alert.alert('Success', `${contact.username} removed from contacts`);
+      Alert.alert("Success", `${contact.username} removed from contacts`);
       await loadContacts();
     } catch (error) {
-      ErrorService.handleError(error, 'Remove Contact');
+      ErrorService.handleError(error, "Remove Contact");
     }
   };
 
   // 🔐 Handle both regular and secret chat creation
-  const handleStartChat = async (contact: Contact, isSecret: boolean = false) => {
+  const handleStartChat = async (
+    contact: Contact,
+    isSecret: boolean = false
+  ) => {
     if (!user || creatingChat) return;
 
     setCreatingChat(true);
@@ -189,23 +207,26 @@ export default function ContactsScreen() {
       // Get current user profile
       const currentUserProfile = await getUserProfile(user.uid);
       if (!currentUserProfile) {
-        Alert.alert('Error', 'Could not load your profile');
+        Alert.alert("Error", "Could not load your profile");
         return;
       }
 
       // Create appropriate chat type
-      const chatId = isSecret 
-        ? await ChatService.createSecretChat(currentUserProfile, contact)
-        : await ChatService.createChat(currentUserProfile, contact);
-      
+      const chatId = isSecret
+        ? await firebaseChatService.createSecretChat(
+            currentUserProfile,
+            contact
+          )
+        : await firebaseChatService.createChat(currentUserProfile, contact);
+
       // Show confirmation for secret chats
       if (isSecret) {
         Alert.alert(
-          '🔒 Secret Chat Created',
+          "🔒 Secret Chat Created",
           `Your secret chat with ${contact.username} is now encrypted end-to-end. Messages will be secured with encryption.`,
           [
             {
-              text: 'Start Chatting',
+              text: "Start Chatting",
               onPress: () => router.push(`/chat/${chatId}`),
             },
           ]
@@ -215,7 +236,7 @@ export default function ContactsScreen() {
         router.push(`/chat/${chatId}`);
       }
     } catch (error) {
-      ErrorService.handleError(error, 'Start Chat');
+      ErrorService.handleError(error, "Start Chat");
     } finally {
       setCreatingChat(false);
     }
@@ -242,7 +263,7 @@ export default function ContactsScreen() {
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'contacts':
+      case "contacts":
         return (
           <View style={styles.tabContent}>
             {loading ? (
@@ -266,21 +287,18 @@ export default function ContactsScreen() {
             )}
           </View>
         );
-      case 'requests':
+      case "requests":
         return <ContactRequestsScreen />;
-      case 'search':
+      case "search":
         return <UserSearchScreen />;
-      case 'scan':
+      case "scan":
         return (
           <View style={styles.scanContainer}>
             <Text style={styles.scanTitle}>QR Code Scanner</Text>
             <Text style={styles.scanSubtitle}>
               Scan a user's QR code to send them a contact request
             </Text>
-            <TouchableOpacity
-              style={styles.scanButton}
-              onPress={handleQRScan}
-            >
+            <TouchableOpacity style={styles.scanButton} onPress={handleQRScan}>
               <Text style={styles.scanButtonText}>Open Scanner</Text>
             </TouchableOpacity>
           </View>
@@ -294,37 +312,57 @@ export default function ContactsScreen() {
     <View style={styles.container}>
       <View style={styles.tabBar}>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'contacts' && styles.activeTab]}
+          style={[styles.tab, activeTab === "contacts" && styles.activeTab]}
           onPress={() => {
-            loadContacts()
-            setActiveTab('contacts')
+            loadContacts();
+            setActiveTab("contacts");
           }}
         >
-          <Text style={[styles.tabText, activeTab === 'contacts' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "contacts" && styles.activeTabText,
+            ]}
+          >
             Contacts
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'requests' && styles.activeTab]}
-          onPress={() => setActiveTab('requests')}
+          style={[styles.tab, activeTab === "requests" && styles.activeTab]}
+          onPress={() => setActiveTab("requests")}
         >
-          <Text style={[styles.tabText, activeTab === 'requests' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "requests" && styles.activeTabText,
+            ]}
+          >
             Requests
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'search' && styles.activeTab]}
-          onPress={() => setActiveTab('search')}
+          style={[styles.tab, activeTab === "search" && styles.activeTab]}
+          onPress={() => setActiveTab("search")}
         >
-          <Text style={[styles.tabText, activeTab === 'search' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "search" && styles.activeTabText,
+            ]}
+          >
             Search
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.tab, activeTab === 'scan' && styles.activeTab]}
-          onPress={() => setActiveTab('scan')}
+          style={[styles.tab, activeTab === "scan" && styles.activeTab]}
+          onPress={() => setActiveTab("scan")}
         >
-          <Text style={[styles.tabText, activeTab === 'scan' && styles.activeTabText]}>
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "scan" && styles.activeTabText,
+            ]}
+          >
             Scan QR
           </Text>
         </TouchableOpacity>
@@ -346,7 +384,7 @@ export default function ContactsScreen() {
       {creatingChat && (
         <View style={styles.loadingOverlay}>
           <Text style={styles.loadingOverlayText}>
-            {creatingChat ? 'Starting chat...' : 'Processing...'}
+            {creatingChat ? "Starting chat..." : "Processing..."}
           </Text>
         </View>
       )}
@@ -357,63 +395,63 @@ export default function ContactsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
   },
   tabBar: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: "#eee",
   },
   tab: {
     flex: 1,
     paddingVertical: 16,
-    alignItems: 'center',
+    alignItems: "center",
   },
   activeTab: {
     borderBottomWidth: 2,
-    borderBottomColor: '#007AFF',
+    borderBottomColor: "#007AFF",
   },
   tabText: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   activeTabText: {
-    color: '#007AFF',
-    fontWeight: '600',
+    color: "#007AFF",
+    fontWeight: "600",
   },
   tabContent: {
     flex: 1,
   },
   centerContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 20,
   },
   noContactsText: {
     fontSize: 18,
-    color: '#666',
+    color: "#666",
     marginBottom: 8,
   },
   noContactsSubtext: {
     fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
+    color: "#999",
+    textAlign: "center",
   },
   contactsList: {
     flex: 1,
   },
   contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: "#eee",
   },
   contactInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   avatar: {
@@ -426,134 +464,134 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#007AFF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 12,
   },
   avatarText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   contactDetails: {
     flex: 1,
   },
   username: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
   },
   displayName: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
     marginTop: 2,
   },
   contactActions: {
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   chatButton: {
-    backgroundColor: '#34C759',
+    backgroundColor: "#34C759",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
     marginRight: 8,
   },
   chatButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   removeButton: {
-    backgroundColor: '#ff3b30',
+    backgroundColor: "#ff3b30",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
   },
   removeButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   scanContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
   scanTitle: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 10,
   },
   scanSubtitle: {
     fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
+    color: "#666",
+    textAlign: "center",
     marginBottom: 30,
   },
   scanButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: "#007AFF",
     paddingHorizontal: 30,
     paddingVertical: 15,
     borderRadius: 8,
   },
   scanButtonText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   loadingOverlay: {
-    position: 'absolute',
+    position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingOverlayText: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   // 🔐 Modal styles for chat options
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 20,
-    width: '90%',
+    width: "90%",
     maxWidth: 400,
   },
   modalTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: "bold",
+    textAlign: "center",
     marginBottom: 20,
-    color: '#333',
+    color: "#333",
   },
   chatOptionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     padding: 16,
     borderRadius: 8,
     marginBottom: 12,
     borderWidth: 1,
   },
   regularChatButton: {
-    backgroundColor: '#f8f9fa',
-    borderColor: '#e9ecef',
+    backgroundColor: "#f8f9fa",
+    borderColor: "#e9ecef",
   },
   secretChatButton: {
-    backgroundColor: '#fff3e0',
-    borderColor: '#ffcc02',
+    backgroundColor: "#fff3e0",
+    borderColor: "#ffcc02",
   },
   chatOptionIcon: {
     fontSize: 24,
@@ -564,24 +602,24 @@ const styles = StyleSheet.create({
   },
   chatOptionTitle: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: "600",
+    color: "#333",
     marginBottom: 2,
   },
   chatOptionDescription: {
     fontSize: 14,
-    color: '#666',
+    color: "#666",
   },
   cancelButton: {
     padding: 16,
-    alignItems: 'center',
+    alignItems: "center",
     borderRadius: 8,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: "#f8f9fa",
     marginTop: 8,
   },
   cancelButtonText: {
     fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
+    color: "#666",
+    fontWeight: "600",
   },
 });
