@@ -1,6 +1,7 @@
-// app/chat/[id].tsx
+"use client";
 
 import MessageItem from "@/components/chat/MessageItem";
+import MessageActionModal from "@/components/chat/MessageActionModal";
 import ImagePickerModal from "@/components/media/ImagePickerModal";
 import VideoPickerModal from "@/components/media/VideoPickerModal";
 import { useAuth } from "@/context/AuthContext";
@@ -9,20 +10,20 @@ import { isContact } from "@/services/contactService";
 import { ErrorService } from "@/services/errorService";
 import {
   MessageService,
-  MessagesPaginationResult,
+  type MessagesPaginationResult,
 } from "@/services/messageService";
-import { getUserProfile, UserProfile } from "@/services/userService";
-import {
+import { getUserProfile, type UserProfile } from "@/services/userService";
+import type {
   Chat,
   Message,
   MessageStatus,
   MessageType,
   SendMessageData,
 } from "@/types/messageTypes";
-import * as ImagePicker from "expo-image-picker";
+import type * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import type { DocumentData, QueryDocumentSnapshot } from "firebase/firestore";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -54,6 +55,10 @@ export default function ChatScreen() {
   const [sendingImage, setSendingImage] = useState(false);
   const [sendingVideo, setSendingVideo] = useState(false);
 
+  // Message action modal state
+  const [showMessageActionModal, setShowMessageActionModal] = useState(false);
+  const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
+
   // user and other participant details
   const [otherParticipant, setOtherParticipant] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -66,6 +71,17 @@ export default function ChatScreen() {
   >();
 
   const flatListRef = useRef<FlatList>(null);
+
+  // Handle message long press
+  const handleMessageLongPress = (message: Message) => {
+    setSelectedMessage(message);
+    setShowMessageActionModal(true);
+  };
+
+  const closeMessageActionModal = () => {
+    setShowMessageActionModal(false);
+    setSelectedMessage(null);
+  };
 
   // Main initialization effect
   useEffect(() => {
@@ -81,6 +97,7 @@ export default function ChatScreen() {
         if (chatData) {
           await checkContactStatusWithData(chatData);
         }
+
         const userProfileData = await getUserProfile(user.uid);
         if (userProfileData) {
           setUserProfile(userProfileData);
@@ -138,14 +155,13 @@ export default function ChatScreen() {
     messageId: string,
     newStatus: MessageStatus,
     updatedMessage: Message,
-    maxRetries: number = 10,
-    delay: number = 500 // ms
+    maxRetries = 10,
+    delay = 500 // ms
   ): void => {
     let attempts = 0;
 
     const update = (): void => {
       let found = false;
-
       setMessages((prevMessages: Message[]): Message[] => {
         const newMessages = prevMessages.map((msg: Message): Message => {
           if (msg.id === messageId) {
@@ -180,8 +196,8 @@ export default function ChatScreen() {
         setIsContactValid(false);
         return;
       }
-      setOtherParticipant(otherParticipant);
 
+      setOtherParticipant(otherParticipant);
       const stillContacts = await isContact(user.uid, otherParticipant.uid);
       setIsContactValid(stillContacts);
     } catch (error) {
@@ -197,7 +213,6 @@ export default function ChatScreen() {
     if (!chatId || !hasMoreMessages || loadingOlderMessages) return;
 
     setLoadingOlderMessages(true);
-
     try {
       const result: MessagesPaginationResult =
         await MessageService.loadOlderMessages(chatId, lastDoc);
@@ -211,7 +226,6 @@ export default function ChatScreen() {
               new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
           );
         });
-
         setLastDoc(result.lastDoc);
       }
 
@@ -225,10 +239,12 @@ export default function ChatScreen() {
 
   const sendMessage = async () => {
     if (!inputText.trim() || !user || !chatId || sending) return;
+
     const messageContent = inputText.trim();
     setInputText("");
     await sendMessageToServer("text", messageContent);
   };
+
   const sendMessageToServer = async (
     type: MessageType,
     messageContent?: string,
@@ -236,6 +252,7 @@ export default function ChatScreen() {
     video?: ImagePicker.ImagePickerAsset
   ) => {
     if (!user || !chatId || sending || sendingImage || sendingVideo) return;
+
     if (!isContactValid) {
       Alert.alert(
         "Cannot Send Message",
@@ -244,11 +261,13 @@ export default function ChatScreen() {
       );
       return;
     }
-    setSending(true);
 
+    setSending(true);
     let tempId: string;
+
     try {
       const senderUsername = userProfile?.username || user.email || "User";
+
       // Create a temporary message to show immediately
       tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const tempMessage: Message = {
@@ -297,11 +316,13 @@ export default function ChatScreen() {
         otherParticipant.uid,
         tempMessage as SendMessageData
       );
+
       const updatedMessage: Message = {
         ...tempMessage,
         id: messageId, // Update with real ID from server
         status: "sent", // Update status to sent
       };
+
       messagesCopy = messagesCopy.map((msg) =>
         msg.id === tempId ? updatedMessage : msg
       );
@@ -342,8 +363,13 @@ export default function ChatScreen() {
   const renderMessage = useCallback(
     ({ item, index }: { item: Message; index: number }) => {
       const isOwnMessage = item.senderId === user?.uid;
-
-      return <MessageItem message={item} isOwnMessage={isOwnMessage} />;
+      return (
+        <MessageItem
+          message={item}
+          isOwnMessage={isOwnMessage}
+          onLongPress={handleMessageLongPress}
+        />
+      );
     },
     [messages, user]
   );
@@ -559,6 +585,15 @@ export default function ChatScreen() {
           </Text>
         </View>
       )}
+
+      {/* Message Action Modal */}
+      <MessageActionModal
+        visible={showMessageActionModal}
+        onClose={closeMessageActionModal}
+        chatId={chatId}
+        message={selectedMessage}
+        isOwnMessage={selectedMessage?.senderId === user?.uid}
+      />
 
       {/* Image Picker Modal */}
       <ImagePickerModal

@@ -1,5 +1,5 @@
 // types/messageTypes.ts
-export type MessageStatus = 'sending' | 'sent' | 'read' | 'failed' | 'deleted';
+export type MessageStatus = 'sending' | 'sent' | 'read' | 'edited' | 'deleted';
 export type MessageType = 'text' | 'image' | 'video';
 export interface ImageData {
   uri: string;
