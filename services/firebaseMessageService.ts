@@ -1,4 +1,4 @@
-// services/FirebaseMessageService.ts
+// services/firebaseMessageService.ts
 
 import {
   addDoc,
@@ -151,20 +151,20 @@ export class FirebaseMessageService {
       const baseMessage = await this.createBaseMessage(chatId, senderId, messageData);
 
       const { finalContent, encryptedContent, isEncrypted } = await this.handleEncryption(
-        messageData.content || '',
+        baseMessage.content || '',
         chat,
       );
 
       let processedImage;
-      if (messageData.type === 'image' && messageData.imageData) {
+      if (baseMessage.type === 'image' && baseMessage.imageData) {
         const messageId = ImageService.generateImageMessageId();
-        processedImage = await ImageService.processImageForChat(messageData.imageData.uri, chatId, messageId);
+        processedImage = await ImageService.processImageForChat(baseMessage.imageData.uri, chatId, messageId);
       }
 
       let processedVideo;
-      if (messageData.type === 'video' && messageData.videoData) {
+      if (baseMessage.type === 'video' && baseMessage.videoData) {
         const messageId = VideoService.generateVideoMessageId();
-        processedVideo = await VideoService.processVideoForChat(messageData.videoData, chatId, messageId);
+        processedVideo = await VideoService.processVideoForChat(baseMessage.videoData, chatId, messageId);
       }
 
       const message: Omit<Message, 'id'> = {
@@ -172,8 +172,8 @@ export class FirebaseMessageService {
         content: finalContent,
         isEncrypted,
         ...(encryptedContent && { encryptedContent }),
-        ...(messageData.type === 'image' && processedImage && { imageData: processedImage }),
-        ...(messageData.type === 'video' && processedVideo && { videoData: processedVideo }),
+        ...(baseMessage.type === 'image' && processedImage && { imageData: processedImage }),
+        ...(baseMessage.type === 'video' && processedVideo && { videoData: processedVideo }),
       };
 
       const messagesRef = collection(db, 'chats', chatId, 'messages');
@@ -185,14 +185,14 @@ export class FirebaseMessageService {
 
       await updateDoc(docRef, { status: 'sent' });
       // 🔐 Update last message in chat with encryption support
-      const lastMessageContent = finalContent || (messageData.type === 'image' ? '📷 Photo' : messageData.type === 'video' ? '🎥 Video' : '');
+      const lastMessageContent = finalContent || (baseMessage.type === 'image' ? '📷 Photo' : baseMessage.type === 'video' ? '🎥 Video' : '');
 
       await firebaseChatService.updateLastMessage(
         chatId,
         senderId,
         baseMessage.senderUsername,
         lastMessageContent,
-        messageData.type,
+        baseMessage.type,
         isEncrypted
       );
       await firebaseChatService.incrementUnreadCount(chatId, receiverId);

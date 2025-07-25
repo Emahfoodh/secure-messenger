@@ -5,9 +5,10 @@ import MessageItem from "@/components/chat/MessageItem";
 import ImagePickerModal from "@/components/media/ImagePickerModal";
 import VideoPickerModal from "@/components/media/VideoPickerModal";
 import { useAuth } from "@/context/AuthContext";
+import { ChatSystemService } from "@/services/ChatSystemService";
 import { isContact } from "@/services/contactService";
+import { DatabaseService } from "@/services/databaseService";
 import { ErrorService } from "@/services/errorService";
-import { firebaseChatService } from "@/services/firebaseChatService";
 import {
   FirebaseMessageService,
   type MessagesPaginationResult,
@@ -96,7 +97,7 @@ export default function ChatScreen() {
     const initializeChat = async () => {
       try {
         // First load chat details
-        const chatData = await firebaseChatService.getChatById(chatId);
+        const chatData = await DatabaseService.getChatById(chatId);
         setChat(chatData);
 
         // Then check contact status
@@ -318,8 +319,8 @@ export default function ChatScreen() {
       let messagesCopy = [tempMessage, ...messages];
       setMessages(messagesCopy);
 
-      // 🔐 Send message (encryption handled automatically in MessageService)
-      const messageId = await FirebaseMessageService.sendMessage(
+      // 🔐 Send message (encryption handled automatically in ChatSystemService)
+      const messageId = await ChatSystemService.sendMessage(
         chatId,
         user.uid,
         otherParticipant.uid,

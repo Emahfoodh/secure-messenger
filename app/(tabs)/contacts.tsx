@@ -4,9 +4,9 @@ import { useAuth } from "@/context/AuthContext";
 import ContactRequestsScreen from "@/screens/contact/ContactRequestsScreen";
 import QRScannerScreen from "@/screens/contact/QRScannerScreen";
 import UserSearchScreen from "@/screens/contact/UserSearchScreen";
+import { ChatSystemService } from "@/services/ChatSystemService";
 import { Contact, getContacts, removeContact } from "@/services/contactService";
 import { ErrorService } from "@/services/errorService";
-import { firebaseChatService } from "@/services/firebaseChatService";
 import { getUserProfile } from "@/services/userService";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -213,11 +213,11 @@ export default function ContactsScreen() {
 
       // Create appropriate chat type
       const chatId = isSecret
-        ? await firebaseChatService.createSecretChat(
+        ? await ChatSystemService.createSecretChat(
             currentUserProfile,
             contact
           )
-        : await firebaseChatService.createChat(currentUserProfile, contact);
+        : await ChatSystemService.createChat(currentUserProfile, contact);
 
       // Show confirmation for secret chats
       if (isSecret) {

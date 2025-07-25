@@ -1,5 +1,5 @@
 "use client";
-import { FirebaseMessageService } from "@/services/firebaseMessageService";
+import { ChatSystemService } from "@/services/ChatSystemService";
 import type { Message } from "@/types/messageTypes";
 import type React from "react";
 import { useEffect, useState } from "react";
@@ -43,12 +43,7 @@ const MessageActionModal: React.FC<MessageActionModalProps> = ({
 
   const handleConfirmEdit = () => {
     if (!message || !editedText.trim()) return;
-    console.log("Edit confirmed:", {
-      messageId: message?.id,
-      originalContent: message?.content,
-      editedContent: editedText,
-    });
-    FirebaseMessageService.editMessage(chatId, message.id, editedText);
+    ChatSystemService.editMessage(chatId, message.id, editedText);
     setIsEditMode(false);
     setEditedText("");
     onClose();
@@ -61,7 +56,7 @@ const MessageActionModal: React.FC<MessageActionModalProps> = ({
 
   const handleDelete = () => {
     if (!message) return;
-    FirebaseMessageService.deleteMessage(chatId, message?.id);
+    ChatSystemService.deleteMessage(chatId, message?.id);
     onClose();
   };
 
