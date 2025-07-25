@@ -1,19 +1,19 @@
 "use client";
-import { MessageService } from "@/services/messageService";
+import { FirebaseMessageService } from "@/services/firebaseMessageService";
 import type { Message } from "@/types/messageTypes";
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
-  Modal,
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  TextInput,
   Dimensions,
   KeyboardAvoidingView,
-  ScrollView,
+  Modal,
   Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface MessageActionModalProps {
@@ -48,7 +48,7 @@ const MessageActionModal: React.FC<MessageActionModalProps> = ({
       originalContent: message?.content,
       editedContent: editedText,
     });
-    MessageService.editMessage(chatId, message.id, editedText);
+    FirebaseMessageService.editMessage(chatId, message.id, editedText);
     setIsEditMode(false);
     setEditedText("");
     onClose();
@@ -61,7 +61,7 @@ const MessageActionModal: React.FC<MessageActionModalProps> = ({
 
   const handleDelete = () => {
     if (!message) return;
-    MessageService.deleteMessage(chatId, message?.id);
+    FirebaseMessageService.deleteMessage(chatId, message?.id);
     onClose();
   };
 

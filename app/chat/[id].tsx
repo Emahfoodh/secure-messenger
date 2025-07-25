@@ -1,7 +1,7 @@
 "use client";
 
-import MessageItem from "@/components/chat/MessageItem";
 import MessageActionModal from "@/components/chat/MessageActionModal";
+import MessageItem from "@/components/chat/MessageItem";
 import ImagePickerModal from "@/components/media/ImagePickerModal";
 import VideoPickerModal from "@/components/media/VideoPickerModal";
 import { useAuth } from "@/context/AuthContext";
@@ -9,9 +9,9 @@ import { ChatService } from "@/services/chatService";
 import { isContact } from "@/services/contactService";
 import { ErrorService } from "@/services/errorService";
 import {
-  MessageService,
+  FirebaseMessageService,
   type MessagesPaginationResult,
-} from "@/services/messageService";
+} from "@/services/firebaseMessageService";
 import { getUserProfile, type UserProfile } from "@/services/userService";
 import type {
   Chat,
@@ -110,7 +110,7 @@ export default function ChatScreen() {
         }
 
         await loadOlderMessages();
-        await MessageService.markOtherUsersMessagesAsRead(chatId, user.uid);
+        await FirebaseMessageService.markOtherUsersMessagesAsRead(chatId, user.uid);
       } catch (error) {
         console.error("Error initializing chat:", error);
         ErrorService.handleError(error, "Load Chat");
@@ -122,7 +122,7 @@ export default function ChatScreen() {
 
     initializeChat();
 
-    const unsubscribe = MessageService.listenForMessages(
+    const unsubscribe = FirebaseMessageService.listenForMessages(
       chatId,
       user.uid,
       // Callback for new messages
@@ -142,7 +142,7 @@ export default function ChatScreen() {
           }
           return prevMessages;
         });
-        MessageService.markMessageAsRead(chatId, user.uid, message.id);
+        FirebaseMessageService.markMessageAsRead(chatId, user.uid, message.id);
       },
       // Callback for status changes
       (messageId, newStatus, updatedMessage) => {
@@ -221,7 +221,7 @@ export default function ChatScreen() {
     setLoadingOlderMessages(true);
     try {
       const result: MessagesPaginationResult =
-        await MessageService.loadOlderMessages(chatId, lastDoc);
+        await FirebaseMessageService.loadOlderMessages(chatId, lastDoc);
 
       if (result.messages.length > 0) {
         setMessages((prevMessages) => {
@@ -316,7 +316,7 @@ export default function ChatScreen() {
       setMessages(messagesCopy);
 
       // 🔐 Send message (encryption handled automatically in MessageService)
-      const messageId = await MessageService.sendMessage(
+      const messageId = await FirebaseMessageService.sendMessage(
         chatId,
         user.uid,
         otherParticipant.uid,

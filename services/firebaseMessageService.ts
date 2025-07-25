@@ -1,4 +1,4 @@
-// services/messageService.ts
+// services/FirebaseMessageService.ts
 
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -36,7 +36,7 @@ export interface MessagesPaginationResult {
   lastDoc?: QueryDocumentSnapshot<DocumentData>;
 }
 
-export class MessageService {
+export class FirebaseMessageService {
   private static readonly DEFAULT_MESSAGE_LIMIT = 25;
   private static readonly PAGINATION_LIMIT = 20;
   private static readonly FAILED_DECRYPT_MESSAGE = '🔒 Failed to decrypt message';
