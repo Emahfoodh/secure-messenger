@@ -34,7 +34,7 @@ const MessageItem: React.FC<MessageItemProps> = memo(
         case "read":
           return "✓✓";
         case "deleted":
-          return "❌";
+          return "X";
         default:
           return "";
       }
